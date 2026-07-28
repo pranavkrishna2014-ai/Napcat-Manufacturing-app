@@ -7,6 +7,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   :root{
     --bg:#0f1419; --panel:#1a2029; --panel2:#232b36; --line:#2f3946;
@@ -119,6 +120,7 @@
     <button data-v="quilting">Quilting</button>
   </nav>
   <div class="row" style="gap:8px">
+    <span class="chip" id="syncChip" title="Online storage status">…</span>
     <span class="chip" id="userChip"></span>
     <button class="btn ghost sm" onclick="logout()">Logout</button>
   </div>
@@ -364,7 +366,8 @@ const RULES={
   area_rate: {label:"Per surface area — rate × (L×W in sqft) (litres/kg adhesive)", unit:"", needs:["rate"]},
   fixed:     {label:"Fixed quantity per mattress (any unit — litres/kg/pcs)", unit:"", needs:["count"]}
 };
-let DB=load();
+let DB=cacheLoad()||ensureDB(sampleDB());
+let CURRENT_VIEW='dash';
 
 /* ============================ SAMPLE DATA ============================ */
 function sampleDB(){
@@ -484,14 +487,96 @@ function ensureDB(d){
   return d;
 }
 
-/* ============================ PERSISTENCE ============================ */
-function uid(){return Math.random().toString(36).slice(2,10)}
-function load(){try{const s=localStorage.getItem("wo_db");if(s)return ensureDB(JSON.parse(s))}catch(e){}
-  const d=sampleDB();localStorage.setItem("wo_db",JSON.stringify(d));return d}
-function save(){localStorage.setItem("wo_db",JSON.stringify(DB))}
+/* ============================ ONLINE STORAGE (Supabase) ============================ */
+const SUPA_URL="https://cwezzjmifaydqiamudfk.supabase.co";
+const SUPA_KEY="sb_publishable_BMya2YE_astV8jKjK27CDQ_gTfc1vVW";
+let sb=null; try{ if(window.supabase) sb=window.supabase.createClient(SUPA_URL,SUPA_KEY); }catch(e){}
+let CLOUD_OK=false, SNAP={}, pushing=false, dirty=false;
+// [table, DB key, row builder]
+const COLLS=[
+  ['orders','orders', o=>({id:o.id,num:o.num,date:o.date,data:o})],
+  ['cuttings','cuts', o=>({id:o.id,no:o.no,date:o.date,data:o})],
+  ['quilting','quiltJobs', o=>({id:o.id,no:o.no,date:o.date,data:o})],
+  ['materials','materials', o=>({id:o.id,data:o})],
+  ['products','products', o=>({id:o.id,data:o})],
+  ['app_users','users', o=>({id:o.id,data:o})],
+];
+function metaObj(){return {settings:DB.settings,woSeq:DB.woSeq,blockSeq:DB.blockSeq,cutSeq:DB.cutSeq,quiltSeq:DB.quiltSeq,adminPin:DB.adminPin};}
+function setSync(t,cls){const c=document.getElementById('syncChip');if(c){c.textContent=t;c.style.color=cls||'';}}
+
+function uid(){return Math.random().toString(36).slice(2,10)+Date.now().toString(36).slice(-4)}
+function cacheLoad(){try{const s=localStorage.getItem("wo_db");if(s)return ensureDB(JSON.parse(s))}catch(e){}return null;}
+function save(){ try{localStorage.setItem("wo_db",JSON.stringify(DB));}catch(e){} if(CLOUD_OK)scheduleCloudPush(); }
 function logEdit(obj){obj.edited=true;obj.editLog=obj.editLog||[];
   obj.editLog.push({at:new Date().toISOString(),by:(CURRENT_USER?CURRENT_USER.name:'?')});}
 function lastEdit(obj){const l=obj.editLog;return l&&l.length?l[l.length-1]:null;}
+
+async function cloudLoad(){
+  const q=t=>sb.from(t).select('data');
+  const [o,c,qq,m,p,u,meta]=await Promise.all([q('orders'),q('cuttings'),q('quilting'),
+    q('materials'),q('products'),q('app_users'),sb.from('meta').select('data').eq('id','singleton')]);
+  for(const r of [o,c,qq,m,p,u,meta]) if(r.error) throw r.error;
+  const rows=res=>(res.data||[]).map(x=>x.data);
+  const md=(meta.data&&meta.data[0])?meta.data[0].data:null;
+  const empty=!o.data.length&&!c.data.length&&!qq.data.length&&!m.data.length&&!p.data.length&&!u.data.length&&!md;
+  if(empty) return true;
+  DB={orders:rows(o),cuts:rows(c),quiltJobs:rows(qq),materials:rows(m),products:rows(p),users:rows(u),
+    settings:md&&md.settings,woSeq:md&&md.woSeq,blockSeq:md&&md.blockSeq,cutSeq:md&&md.cutSeq,quiltSeq:md&&md.quiltSeq,adminPin:md&&md.adminPin};
+  ensureDB(DB);
+  try{localStorage.setItem("wo_db",JSON.stringify(DB));}catch(e){}
+  return false;
+}
+function initSnap(){
+  SNAP={};
+  COLLS.forEach(([table,key])=>{const mp={};(DB[key]||[]).forEach(x=>mp[x.id]=JSON.stringify(x));SNAP[table]=mp;});
+  SNAP.meta=JSON.stringify(metaObj());
+}
+function scheduleCloudPush(){ dirty=true; setSync('● Saving…','var(--warn)'); if(!pushing)runPush(); }
+async function runPush(){
+  if(pushing)return; pushing=true;
+  try{ while(dirty){ dirty=false; await cloudPushDiff(); } setSync('● Online','var(--accent2)'); }
+  catch(e){ console.error('sync',e); setSync('● Save pending — retrying','var(--warn)'); dirty=true; setTimeout(runPush,4000); }
+  finally{ pushing=false; }
+}
+async function cloudPushDiff(){
+  const state=JSON.parse(JSON.stringify({orders:DB.orders,cuts:DB.cuts,quiltJobs:DB.quiltJobs,
+    materials:DB.materials,products:DB.products,users:DB.users,meta:metaObj()}));
+  for(const [table,key,build] of COLLS){
+    const arr=state[key]||[]; const curMap={}; arr.forEach(x=>curMap[x.id]=JSON.stringify(x));
+    const snap=SNAP[table]||{};
+    const ups=arr.filter(x=>curMap[x.id]!==snap[x.id]).map(build);
+    const dels=Object.keys(snap).filter(id=>!(id in curMap));
+    if(ups.length){const{error}=await sb.from(table).upsert(ups);if(error)throw error;}
+    if(dels.length){const{error}=await sb.from(table).delete().in('id',dels);if(error)throw error;}
+    SNAP[table]=curMap;
+  }
+  const mj=JSON.stringify(state.meta);
+  if(SNAP.meta!==mj){const{error}=await sb.from('meta').upsert({id:'singleton',data:state.meta});if(error)throw error;SNAP.meta=mj;}
+}
+async function cloudPushAll(){ SNAP={}; await cloudPushDiff(); }
+function startPolling(){ setInterval(async()=>{
+  if(!CLOUD_OK||pushing||dirty)return;
+  if((document.getElementById('modal').style.display||'')==='flex')return;
+  try{ const empty=await cloudLoad(); if(!empty){ initSnap(); refreshView(); } }catch(e){}
+}, 15000); }
+function refreshView(){
+  if(!CURRENT_USER)return; const v=CURRENT_VIEW;
+  if(v==='dash')renderDash(); else if(v==='wo')renderWO(); else if(v==='admin')renderAdmin();
+  else if(v==='cutting')renderCutTab(); else if(v==='quilting')renderQuiltTab();
+}
+async function boot(){
+  setSync('● Connecting…','var(--warn)');
+  if(sb){
+    try{
+      const empty=await cloudLoad();
+      if(empty){ DB=ensureDB(sampleDB()); await cloudPushAll(); }
+      else initSnap();
+      CLOUD_OK=true; setSync('● Online','var(--accent2)');
+    }catch(e){ console.error('cloud',e); CLOUD_OK=false; setSync('● Offline (this device only)','var(--danger)'); }
+  } else { setSync('● Offline (no internet)','var(--danger)'); }
+  if(!restoreSession()){ const li=document.getElementById('loginUser'); if(li)li.focus(); }
+  if(CLOUD_OK) startPolling();
+}
 function matById(id){return DB.materials.find(m=>m.id===id)}
 
 /* ============================ CALCULATION ENGINE ============================ */
@@ -537,6 +622,7 @@ function fmt2(n){return Number(n||0).toFixed(2)}
 /* ============================ NAVIGATION ============================ */
 function go(v){
   if(CURRENT_USER && CURRENT_USER.role!=='admin' && v==='admin')v='wo';
+  CURRENT_VIEW=v;
   document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('active',b.dataset.v===v));
   document.querySelectorAll('.view').forEach(s=>s.classList.remove('active'));
   document.getElementById('view-'+v).classList.add('active');
@@ -1652,7 +1738,7 @@ async function bulkPDF(type){
 }
 
 /* ============================ INIT ============================ */
-if(!restoreSession()){ document.getElementById('loginUser').focus(); }
+boot();
 </script>
 </body>
 </html>
