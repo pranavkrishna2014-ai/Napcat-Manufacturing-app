@@ -10,16 +10,16 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   :root{
-    --bg:#0f1419; --panel:#1a2029; --panel2:#232b36; --line:#2f3946;
-    --txt:#e7edf3; --muted:#8b98a8; --accent:#3d7dff; --accent2:#22c58b;
-    --warn:#f0a020; --danger:#ff5c66; --chip:#2a3644;
+    --bg:#f4f6fa; --panel:#ffffff; --panel2:#f2f5f9; --line:#dde3ea;
+    --txt:#1f2933; --muted:#697586; --accent:#2f6df6; --accent2:#12a670;
+    --warn:#b5730a; --danger:#d92d20; --chip:#eef1f6;
   }
   *{box-sizing:border-box;margin:0;padding:0}
   body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
     background:var(--bg);color:var(--txt);font-size:14px;line-height:1.5}
   a{color:var(--accent)}
   /* Layout */
-  header.top{display:flex;align-items:center;gap:16px;padding:14px 22px;background:linear-gradient(90deg,#141a22,#1a222d);
+  header.top{display:flex;align-items:center;gap:16px;padding:14px 22px;background:linear-gradient(90deg,#ffffff,#eef3fb);
     border-bottom:1px solid var(--line);position:sticky;top:0;z-index:50}
   header.top .brand{font-weight:700;font-size:18px;letter-spacing:.3px}
   header.top .brand span{color:var(--accent)}
@@ -43,7 +43,7 @@
   input,select,textarea{width:100%;background:var(--panel2);border:1px solid var(--line);color:var(--txt);
     padding:9px 11px;border-radius:8px;font-size:14px;font-family:inherit}
   input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent)}
-  input.bad{border-color:var(--danger);background:#2a1c1f}
+  input.bad{border-color:var(--danger);background:#fdeceb}
   .btn{background:var(--accent);color:#fff;border:none;padding:9px 16px;border-radius:8px;cursor:pointer;font-weight:600;font-size:13px}
   .btn:hover{filter:brightness(1.08)}
   .btn.g{background:var(--accent2)} .btn.ghost{background:var(--panel2);border:1px solid var(--line);color:var(--txt)}
@@ -53,29 +53,29 @@
   table{width:100%;border-collapse:collapse}
   th,td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--line);font-size:13px;vertical-align:middle}
   th{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.4px;font-weight:700}
-  tr:hover td{background:#1e2732}
+  tr:hover td{background:#f0f4fb}
   .chip{display:inline-block;background:var(--chip);border-radius:20px;padding:3px 10px;font-size:11px;font-weight:600}
-  .chip.foam{background:#2a3a4d;color:#7fb4ff}.chip.fabric{background:#2f2a4d;color:#b79bff}
-  .chip.spring{background:#4d3a2a;color:#ffbe7f}.chip.adhesive{background:#2a4d3a;color:#7fffb4}
-  .chip.accessories{background:#4d2a3a;color:#ff9bc0}
+  .chip.foam{background:#e3f0ff;color:#1a5fbf}.chip.fabric{background:#efe8ff;color:#6b3fd4}
+  .chip.spring{background:#fde6cf;color:#a8620a}.chip.adhesive{background:#dcf6e8;color:#0f8a5c}
+  .chip.accessories{background:#ffe4ef;color:#c02f6a}
   .num{text-align:right;font-variant-numeric:tabular-nums}
   .muted{color:var(--muted)} .small{font-size:12px}
   .pill{font-size:11px;padding:2px 8px;border-radius:6px;font-weight:700}
-  .pill.ok{background:#173d2e;color:var(--accent2)} .pill.low{background:#3d2a17;color:var(--warn)}
-  .pill.crit{background:#3d1719;color:var(--danger)}
+  .pill.ok{background:#dcf6e8;color:#0f8a5c} .pill.low{background:#fdeccd;color:#a8620a}
+  .pill.crit{background:#fdecea;color:#c8241a}
   .layer-row{display:grid;grid-template-columns:1.6fr 1fr 1fr auto;gap:8px;margin-bottom:8px;align-items:center}
   .kpi{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:14px}
   .kpi .v{font-size:26px;font-weight:700} .kpi .l{color:var(--muted);font-size:12px}
   .banner{padding:10px 14px;border-radius:8px;font-size:13px;margin-bottom:12px;display:none}
-  .banner.err{background:#3d1719;color:#ffb3b8;display:block;border:1px solid #5c2226}
-  .banner.info{background:#17293d;color:#a9cbff;display:block;border:1px solid #244a6b}
+  .banner.err{background:#fdecea;color:#b42318;display:block;border:1px solid #f4c7c2}
+  .banner.info{background:#eaf2ff;color:#1a5fbf;display:block;border:1px solid #cfe0fb}
   .tag{font-size:11px;color:var(--muted)}
   .divider{height:1px;background:var(--line);margin:14px 0}
   .hint{font-size:12px;color:var(--muted);margin-top:4px}
   .modelPick{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px}
   .modelPick .m{border:1px solid var(--line);background:var(--panel2);padding:10px 14px;border-radius:10px;cursor:pointer;min-width:130px}
   .modelPick .m:hover{border-color:var(--accent)}
-  .modelPick .m.active{border-color:var(--accent);background:#1c2a3f}
+  .modelPick .m.active{border-color:var(--accent);background:#e6f0ff}
   .modelPick .m .bn{font-size:11px;color:var(--muted)} .modelPick .m .nm{font-weight:700}
   .foot{color:var(--muted);font-size:12px;text-align:center;padding:24px}
   .lncard{border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:10px;background:var(--panel2)}
@@ -118,6 +118,7 @@
     <button data-v="admin" data-role="admin">🔒 Admin Control</button>
     <button data-v="cutting">Block Cutting</button>
     <button data-v="quilting">Quilting</button>
+    <button data-v="others">Others</button>
   </nav>
   <div class="row" style="gap:8px">
     <span class="chip" id="syncChip" title="Online storage status">…</span>
@@ -127,7 +128,7 @@
 </header>
 
 <!-- LOGIN OVERLAY -->
-<div id="login" style="position:fixed;inset:0;z-index:200;background:linear-gradient(135deg,#0f1419,#1a222d);display:flex;align-items:center;justify-content:center">
+<div id="login" style="position:fixed;inset:0;z-index:200;background:linear-gradient(135deg,#eef3fb,#dfe8f6);display:flex;align-items:center;justify-content:center">
   <div class="card" style="max-width:360px;width:100%;text-align:center">
     <div class="brand" style="font-size:22px;margin-bottom:4px"><span style="color:var(--accent)">◆</span> Manufacturing System</div>
     <div class="sub muted small" style="margin-bottom:16px">Napcat &amp; Orthonap</div>
@@ -166,7 +167,28 @@
           <div><label class="f">&nbsp;</label>
             <div class="row"><span class="chip" id="woNumChip">WO #: —</span><span class="chip" id="woDateChip"></span></div></div>
         </div>
+        <div class="row" style="margin-top:10px">
+          <label class="row" style="gap:6px;font-size:12px;color:var(--muted);font-weight:600;cursor:pointer">
+            <input type="checkbox" id="woCustom" style="width:auto" onchange="toggleCustom()"> 🧩 Custom order — build a one-off BOM (any ingredients)
+          </label>
+        </div>
       </div>
+
+      <!-- CUSTOM BOM BUILDER -->
+      <div class="card" id="woCustomBox" style="display:none">
+        <div class="row"><b>Custom BOM</b><span class="tag">for orders that don't use a fixed recipe · works for both brands</span></div>
+        <div class="grid g3" style="margin-top:10px">
+          <div><label class="f">Brand</label><select id="woCustBrand">
+            <option>Napcat</option><option>Orthonap</option></select></div>
+          <div><label class="f">Custom name / ref</label><input id="woCustName" placeholder="e.g. Custom — Mr. Rao"></div>
+          <div><label class="f">Border fabric width (in)</label><input id="woCustBW" type="number" value="82" oninput="rebuildCustomProd()"></div>
+        </div>
+        <div class="divider"></div>
+        <div class="row"><b>Layers</b><span class="tag">pick material + rule per layer</span><div class="spacer"></div>
+          <button class="btn sm" onclick="addWOCustLayer()">+ Add layer</button></div>
+        <div id="woCustLayerBox" style="margin-top:10px"></div>
+      </div>
+
       <div class="banner" id="woErr"></div>
       <div class="card">
         <b>Order details</b>
@@ -183,10 +205,15 @@
         <datalist id="dlCust"></datalist><datalist id="dlCity"></datalist><datalist id="dlAgent"></datalist>
       </div>
       <div class="card">
-        <div class="row"><b>Material breakup</b><div class="spacer"></div>
+        <div class="row"><b>Material breakup</b>
+          <label class="row" style="gap:6px;margin-left:14px;font-size:12px;color:var(--muted);font-weight:600;cursor:pointer">
+            <input type="checkbox" id="woAllowSub" style="width:auto" onchange="renderCalc()"> 🔧 Allow ingredient substitution
+          </label>
+          <div class="spacer"></div>
           <button class="btn ghost sm" onclick="downloadOnePDF('wo')">⬇ Download PDF</button>
           <button class="btn g sm" onclick="saveWO()">Save order</button>
         </div>
+        <div class="hint">Turn on substitution to let Shiva swap the foam/fabric used when a different material is needed for an order. Any change is logged in the admin Substitutions report.</div>
         <div id="calcOut" style="margin-top:12px"><p class="muted small">Select a brand and model to begin.</p></div>
       </div>
     </div>
@@ -196,12 +223,17 @@
       <div class="card">
         <div class="row">
           <b>All Work Orders</b><span class="tag" id="woCount"></span><div class="spacer"></div>
-          <label class="tag">From</label><input type="date" id="woFrom" style="max-width:150px">
-          <label class="tag">To</label><input type="date" id="woTo" style="max-width:150px">
-          <button class="btn ghost sm" onclick="renderWOAll()">Filter</button>
           <button class="btn ghost sm" onclick="exportExcel('wo')">⬇ Excel (all)</button>
           <button class="btn sm" onclick="bulkPDF('wo')">⬇ PDF zip (range)</button>
         </div>
+        <div class="row" style="margin-top:10px">
+          <label class="tag">From</label><input type="date" id="woFrom" style="max-width:150px" onchange="renderWOAll()">
+          <label class="tag">To</label><input type="date" id="woTo" style="max-width:150px" onchange="renderWOAll()">
+          <label class="tag">Client</label><input id="woFCust" list="dlCust" placeholder="customer name" style="max-width:180px" oninput="renderWOAll()">
+          <label class="tag">Model</label><input id="woFModel" list="dlModelAll" placeholder="mattress model" style="max-width:180px" oninput="renderWOAll()">
+          <button class="btn ghost sm" onclick="clearWOFilter()">Clear</button>
+        </div>
+        <datalist id="dlModelAll"></datalist>
       </div>
       <div class="card" style="padding:0;overflow:auto"><div id="woAllList"></div></div>
     </div>
@@ -213,6 +245,7 @@
       <div class="row"><h2 class="section">Admin Control</h2></div>
       <nav class="tabs" style="margin:6px 0 16px 0" id="adminTabs">
         <button data-a="review" class="active" onclick="showAdmin('review')">🚩 Review</button>
+        <button data-a="flaglog" onclick="showAdmin('flaglog')">🔔 Flag Log</button>
         <button data-a="materials" onclick="showAdmin('materials')">Material Master</button>
         <button data-a="products" onclick="showAdmin('products')">Products &amp; BOM</button>
         <button data-a="users" onclick="showAdmin('users')">Users</button>
@@ -227,6 +260,11 @@
         <div class="card"><b>Flagged Work Orders</b><div id="flagWO" style="margin-top:10px;overflow:auto"></div></div>
         <div class="card"><b>Flagged Cutting Orders</b><div id="flagCut" style="margin-top:10px;overflow:auto"></div></div>
         <div class="card"><b>Flagged Quilting Jobs</b><div id="flagQuilt" style="margin-top:10px;overflow:auto"></div></div>
+      </div>
+
+      <div class="adminSub" id="adminSub-flaglog" style="display:none">
+        <div class="row"><b>🔔 Flag Log</b><span class="tag">dismissed flags kept for later reconciliation</span></div>
+        <div id="flagLogBody"></div>
       </div>
 
       <div class="adminSub" id="adminSub-users" style="display:none">
@@ -336,6 +374,14 @@
       </div></div>
       <div class="card" style="padding:0;overflow:auto"><div id="quiltAllList"></div></div>
     </div>
+  </section>
+
+  <!-- OTHERS (miscellaneous notes / log) -->
+  <section class="view" id="view-others">
+    <div class="row"><h2 class="section">Others</h2><div class="spacer noprint"></div>
+      <button class="btn" onclick="editOther(null)">+ New entry</button></div>
+    <p class="lead">A place for miscellaneous notes, reminders and anything that doesn't fit the other modules. Shared across everyone.</p>
+    <div class="card" style="padding:0;overflow:auto"><div id="othersList"></div></div>
   </section>
 
 </main>
@@ -465,7 +511,7 @@ function sampleDB(){
       {n:"Antiskid Base Fabric",rule:"fab_bottom"},
     ]),
   ];
-  return {materials,products,orders:[],woSeq:889,
+  return {materials,products,orders:[],woSeq:889,flagLog:[],others:[],
     blocks:[],cuts:[],quiltJobs:[],blockSeq:1,cutSeq:1,quiltSeq:1,adminPin:'1234',
     users:[{id:uid(),name:'Admin',username:'admin',pin:'1234',role:'admin'},
            {id:uid(),name:'Shiva',username:'shiva',pin:'1111',role:'operator'}],
@@ -475,6 +521,8 @@ function ensureDB(d){
   d.orders=d.orders||[]; d.blocks=d.blocks||[]; d.cuts=d.cuts||[]; d.quiltJobs=d.quiltJobs||[];
   d.woSeq=d.woSeq||889; d.blockSeq=d.blockSeq||1; d.cutSeq=d.cutSeq||1; d.quiltSeq=d.quiltSeq||1;
   d.adminPin=d.adminPin||'1234';
+  d.flagLog=d.flagLog||[];
+  d.others=d.others||[];
   d.settings=d.settings||{flagWO:4,flagCut:20,flagQuilt:5};
   if(d.settings.flagWO==null)d.settings.flagWO=4;
   (d.products||[]).forEach(p=>{if(p.borderWidth==null)p.borderWidth=82;});
@@ -484,6 +532,14 @@ function ensureDB(d){
   // migrate legacy quilt receipts -> lots
   d.quiltJobs.forEach(j=>{ if(!j.receipts){ j.receipts=(j.status==='received'&&j.recvM)?
     [{date:j.recvDate||'',recvM:j.recvM,notes:j.recvNotes||''}]:[]; } });
+  // migrate legacy single fabric/foam -> product sets
+  d.quiltJobs.forEach(j=>{
+    if(!j.sets||!j.sets.length){
+      j.sets=[{fabric:j.fabric||'',fabM:+j.fabM||0,foam:j.foam||'',foamM:+j.foamM||0}];
+    }
+    j.fabM=j.sets.reduce((s,x)=>s+(+x.fabM||0),0);
+    j.foamM=j.sets.reduce((s,x)=>s+(+x.foamM||0),0);
+  });
   return d;
 }
 
@@ -501,7 +557,7 @@ const COLLS=[
   ['products','products', o=>({id:o.id,data:o})],
   ['app_users','users', o=>({id:o.id,data:o})],
 ];
-function metaObj(){return {settings:DB.settings,woSeq:DB.woSeq,blockSeq:DB.blockSeq,cutSeq:DB.cutSeq,quiltSeq:DB.quiltSeq,adminPin:DB.adminPin};}
+function metaObj(){return {settings:DB.settings,woSeq:DB.woSeq,blockSeq:DB.blockSeq,cutSeq:DB.cutSeq,quiltSeq:DB.quiltSeq,adminPin:DB.adminPin,flagLog:DB.flagLog,others:DB.others};}
 function setSync(t,cls){const c=document.getElementById('syncChip');if(c){c.textContent=t;c.style.color=cls||'';}}
 
 function uid(){return Math.random().toString(36).slice(2,10)+Date.now().toString(36).slice(-4)}
@@ -521,7 +577,7 @@ async function cloudLoad(){
   const empty=!o.data.length&&!c.data.length&&!qq.data.length&&!m.data.length&&!p.data.length&&!u.data.length&&!md;
   if(empty) return true;
   DB={orders:rows(o),cuts:rows(c),quiltJobs:rows(qq),materials:rows(m),products:rows(p),users:rows(u),
-    settings:md&&md.settings,woSeq:md&&md.woSeq,blockSeq:md&&md.blockSeq,cutSeq:md&&md.cutSeq,quiltSeq:md&&md.quiltSeq,adminPin:md&&md.adminPin};
+    settings:md&&md.settings,woSeq:md&&md.woSeq,blockSeq:md&&md.blockSeq,cutSeq:md&&md.cutSeq,quiltSeq:md&&md.quiltSeq,adminPin:md&&md.adminPin,flagLog:md&&md.flagLog,others:md&&md.others};
   ensureDB(DB);
   try{localStorage.setItem("wo_db",JSON.stringify(DB));}catch(e){}
   return false;
@@ -563,6 +619,7 @@ function refreshView(){
   if(!CURRENT_USER)return; const v=CURRENT_VIEW;
   if(v==='dash')renderDash(); else if(v==='wo')renderWO(); else if(v==='admin')renderAdmin();
   else if(v==='cutting')renderCutTab(); else if(v==='quilting')renderQuiltTab();
+  else if(v==='others')renderOthers();
 }
 async function boot(){
   setSync('● Connecting…','var(--warn)');
@@ -628,7 +685,8 @@ function go(v){
   document.getElementById('view-'+v).classList.add('active');
   if(v==='dash')renderDash(); if(v==='wo')renderWO(); if(v==='products')renderProducts();
   if(v==='admin')renderAdmin();
-  if(v==='cutting')renderCutTab(); if(v==='quilting')renderQuiltTab(); window.scrollTo(0,0);}
+  if(v==='cutting')renderCutTab(); if(v==='quilting')renderQuiltTab();
+  if(v==='others')renderOthers(); window.scrollTo(0,0);}
 /* ============================ LOGIN & ROLES ============================ */
 let CURRENT_USER=null, ADMIN_SUB='review';
 function doLogin(){
@@ -663,6 +721,7 @@ function showAdmin(sub){
   document.getElementById('adminSub-'+sub).style.display='block';
   if(sub==='materials')renderMaterials(); if(sub==='products')renderProducts();
   if(sub==='review')renderReview(); if(sub==='users')renderUsers(); if(sub==='settings')renderSettings();
+  if(sub==='flaglog')renderFlagLog();
 }
 
 /* ============================ FLAG ENGINE (admin-only) ============================ */
@@ -683,36 +742,94 @@ function cutFlag(c){
   return{flag:wastePct>tol,wastePct,reason:`Wastage ${fmt(wastePct,1)}% (skin ${fmt(c.result.skinCFT,2)} + waste ${fmt(c.result.wastage,2)} CFT)`};
 }
 function quiltRecv(j){return (j.receipts||[]).reduce((s,r)=>s+(+r.recvM||0),0);}
+function quiltSets(j){return (j.sets&&j.sets.length)?j.sets:[{fabric:j.fabric||'',fabM:+j.fabM||0,foam:j.foam||'',foamM:+j.foamM||0}];}
+function quiltIssued(j){return quiltSets(j).reduce((s,x)=>s+(+x.fabM||0),0);}
+function quiltFoamTotal(j){return quiltSets(j).reduce((s,x)=>s+(+x.foamM||0),0);}
 function quiltFlag(j){
   const issued=Number(j.fabM||0); if(!issued)return{flag:false};
   const recv=quiltRecv(j); const shortPct=(issued-recv)/issued*100;
   const tol=Number(DB.settings.flagQuilt||0);
   return{flag:shortPct>tol,shortPct,recv,issued,reason:`Received ${fmt(recv,1)}m of ${issued}m issued — short ${fmt(shortPct,1)}%`};
 }
+// ---- dismissable flags: acknowledge like a notification, keep a log to reconcile later ----
+function flagReason(type,rec){const f=type==='wo'?woFlag(rec):type==='cut'?cutFlag(rec):quiltFlag(rec);
+  return type==='wo'?(f.reasons||[]).join('; '):(f.reason||'');}
+function dismissFlag(type,id){
+  const rec=(type==='wo'?DB.orders:type==='cut'?DB.cuts:DB.quiltJobs).find(x=>x.id===id);
+  if(!rec)return;
+  rec.flagDismissed=true;
+  DB.flagLog=DB.flagLog||[];
+  DB.flagLog.push({id:uid(),type,recId:id,ref:(rec.num!=null?('WO #'+rec.num):rec.no),
+    label:type==='wo'?(rec.brand+' · '+rec.model+(rec.cust?' — '+rec.cust:'')):type==='cut'?cutGradeName(rec):(rec.quilter||''),
+    reason:flagReason(type,rec),at:new Date().toISOString(),by:(CURRENT_USER?CURRENT_USER.name:'?'),reconciled:false});
+  save(); renderDash();
+}
+function reopenFlag(logId){
+  const e=(DB.flagLog||[]).find(x=>x.id===logId); if(!e)return;
+  const rec=(e.type==='wo'?DB.orders:e.type==='cut'?DB.cuts:DB.quiltJobs).find(x=>x.id===e.recId);
+  if(rec)rec.flagDismissed=false;
+  DB.flagLog=DB.flagLog.filter(x=>x.id!==logId);
+  save(); renderFlagLog();
+}
+function reconcileFlag(logId){
+  const e=(DB.flagLog||[]).find(x=>x.id===logId); if(!e)return;
+  e.reconciled=!e.reconciled;
+  e.reconciledAt=e.reconciled?new Date().toISOString():null;
+  e.reconciledBy=e.reconciled?(CURRENT_USER?CURRENT_USER.name:'?'):null;
+  save(); renderFlagLog();
+}
+function openFlagRec(type,id){ if(type==='wo')viewWO(id); else if(type==='cut')viewCut(id); else viewQuilt(id); }
+function renderFlagLog(){
+  const box=document.getElementById('flagLogBody'); if(!box)return;
+  const log=(DB.flagLog||[]).slice().reverse();
+  const open=log.filter(e=>!e.reconciled).length;
+  box.innerHTML=`<p class="lead">Flags you dismissed from the dashboard land here. Reconcile them once addressed, or reopen to put them back on the dashboard.</p>
+    <div class="grid g3">
+      <div class="kpi"><div class="v">${log.length}</div><div class="l">Logged flags</div></div>
+      <div class="kpi"><div class="v" style="color:${open?'var(--warn)':'var(--txt)'}">${open}</div><div class="l">Awaiting reconciliation</div></div>
+      <div class="kpi"><div class="v">${log.length-open}</div><div class="l">Reconciled</div></div>
+    </div>
+    <div class="card" style="padding:0;overflow:auto">${log.length?`<table><thead><tr>
+      <th>Type</th><th>Ref</th><th>Detail</th><th>Reason</th><th>Dismissed</th><th>Status</th><th class="noprint"></th></tr></thead><tbody>`+
+      log.map(e=>`<tr>
+        <td><span class="chip ${e.type==='wo'?'foam':e.type==='cut'?'spring':'fabric'}">${e.type==='wo'?'Work Order':e.type==='cut'?'Cutting':'Quilting'}</span></td>
+        <td><a onclick='openFlagRec(${JSON.stringify(e.type)},${JSON.stringify(e.recId)})' style="cursor:pointer">${e.ref||'-'}</a></td>
+        <td class="small">${e.label||''}</td>
+        <td class="small">${e.reason||''}</td>
+        <td class="small">${(e.at||'').slice(0,10)}<div class="tag">${e.by||''}</div></td>
+        <td>${e.reconciled?`<span class="pill ok">RECONCILED</span><div class="tag">${e.reconciledBy||''} ${(e.reconciledAt||'').slice(0,10)}</div>`:`<span class="pill low">OPEN</span>`}</td>
+        <td class="num noprint">
+          <button class="btn ghost sm" onclick='reconcileFlag(${JSON.stringify(e.id)})'>${e.reconciled?'Undo':'Reconcile'}</button>
+          <button class="btn ghost sm" onclick='reopenFlag(${JSON.stringify(e.id)})'>Reopen</button></td></tr>`).join('')
+      +`</tbody></table>`:`<p class="muted small" style="padding:14px">No dismissed flags yet.</p>`}</div>`;
+}
 
 /* ============================ REVIEW ============================ */
 function renderReview(){
-  const wo=DB.orders.map(o=>({o,f:woFlag(o)})).filter(x=>x.f.flag);
-  const cu=DB.cuts.map(c=>({c,f:cutFlag(c)})).filter(x=>x.f.flag);
-  const qu=DB.quiltJobs.map(j=>({j,f:quiltFlag(j)})).filter(x=>x.f.flag);
+  const wo=DB.orders.map(o=>({o,f:woFlag(o)})).filter(x=>x.f.flag && !x.o.flagDismissed);
+  const cu=DB.cuts.map(c=>({c,f:cutFlag(c)})).filter(x=>x.f.flag && !x.c.flagDismissed);
+  const qu=DB.quiltJobs.map(j=>({j,f:quiltFlag(j)})).filter(x=>x.f.flag && !x.j.flagDismissed);
   document.getElementById('reviewKpis').innerHTML=[["Flagged Work Orders",wo.length],
     ["Flagged Cuttings",cu.length],["Flagged Quilting",qu.length]]
     .map(([l,v])=>`<div class="kpi"><div class="v" style="color:${v?'var(--danger)':'var(--txt)'}">${v}</div><div class="l">${l}</div></div>`).join('');
   document.getElementById('flagWO').innerHTML= wo.length?`<table><thead><tr>
-    <th>WO #</th><th>Model</th><th>Customer</th><th>Over recommended</th></tr></thead><tbody>`+
-    wo.map(({o,f})=>`<tr style="background:#2a1518"><td><b>${o.num}</b><div class="tag">${o.date||''}</div></td>
+    <th>WO #</th><th>Model</th><th>Customer</th><th>Over recommended</th><th class="noprint"></th></tr></thead><tbody>`+
+    wo.map(({o,f})=>`<tr style="background:#fdecea"><td><b>${o.num}</b><div class="tag">${o.date||''}</div></td>
       <td>${o.brand} · ${o.model}</td><td>${o.cust||'-'}</td>
-      <td><span class="pill crit">FLAG</span> <span class="small">${f.reasons.join('; ')}</span></td></tr>`).join('')
+      <td><span class="pill crit">FLAG</span> <span class="small">${f.reasons.join('; ')}</span></td>
+      <td class="num noprint"><button class="btn ghost sm" onclick='dismissFlag("wo",${JSON.stringify(o.id)})'>Ignore</button></td></tr>`).join('')
     +`</tbody></table>`:`<p class="muted small">No work orders exceed tolerance. ✓</p>`;
   document.getElementById('flagCut').innerHTML= cu.length?`<table><thead><tr>
-    <th>Cut #</th><th>Grade</th><th>Detail</th></tr></thead><tbody>`+
-    cu.map(({c,f})=>`<tr style="background:#2a1518"><td><b>${c.no}</b></td><td>${cutGradeName(c)}</td>
-      <td><span class="pill crit">FLAG</span> <span class="small">${f.reason}</span></td></tr>`).join('')
+    <th>Cut #</th><th>Grade</th><th>Detail</th><th class="noprint"></th></tr></thead><tbody>`+
+    cu.map(({c,f})=>`<tr style="background:#fdecea"><td><b>${c.no}</b></td><td>${cutGradeName(c)}</td>
+      <td><span class="pill crit">FLAG</span> <span class="small">${f.reason}</span></td>
+      <td class="num noprint"><button class="btn ghost sm" onclick='dismissFlag("cut",${JSON.stringify(c.id)})'>Ignore</button></td></tr>`).join('')
     +`</tbody></table>`:`<p class="muted small">No cutting orders exceed wastage tolerance. ✓</p>`;
   document.getElementById('flagQuilt').innerHTML= qu.length?`<table><thead><tr>
-    <th>Job #</th><th>Quilter</th><th>Detail</th></tr></thead><tbody>`+
-    qu.map(({j,f})=>`<tr style="background:#2a1518"><td><b>${j.no}</b></td><td>${j.quilter||''}</td>
-      <td><span class="pill crit">FLAG</span> <span class="small">${f.reason}</span></td></tr>`).join('')
+    <th>Job #</th><th>Quilter</th><th>Detail</th><th class="noprint"></th></tr></thead><tbody>`+
+    qu.map(({j,f})=>`<tr style="background:#fdecea"><td><b>${j.no}</b></td><td>${j.quilter||''}</td>
+      <td><span class="pill crit">FLAG</span> <span class="small">${f.reason}</span></td>
+      <td class="num noprint"><button class="btn ghost sm" onclick='dismissFlag("quilt",${JSON.stringify(j.id)})'>Ignore</button></td></tr>`).join('')
     +`</tbody></table>`:`<p class="muted small">No quilting jobs short beyond tolerance. ✓</p>`;
 }
 
@@ -812,15 +929,18 @@ function renderUserDash(){
 // ---------- ADMIN DASHBOARD: 4 sections, flags + edits, click opens order ----------
 function editedList(arr){return arr.filter(x=>x.edited);}
 function renderAdminDash(){
-  const woF=DB.orders.map(o=>({o,f:woFlag(o)})).filter(x=>x.f.flag);
-  const cuF=DB.cuts.map(c=>({c,f:cutFlag(c)})).filter(x=>x.f.flag);
-  const quF=DB.quiltJobs.map(j=>({j,f:quiltFlag(j)})).filter(x=>x.f.flag);
+  const woF=DB.orders.map(o=>({o,f:woFlag(o)})).filter(x=>x.f.flag && !x.o.flagDismissed);
+  const cuF=DB.cuts.map(c=>({c,f:cutFlag(c)})).filter(x=>x.f.flag && !x.c.flagDismissed);
+  const quF=DB.quiltJobs.map(j=>({j,f:quiltFlag(j)})).filter(x=>x.f.flag && !x.j.flagDismissed);
+  const dismissedCount=(DB.flagLog||[]).filter(e=>!e.reconciled).length;
   const woE=editedList(DB.orders), cuE=editedList(DB.cuts), quE=editedList(DB.quiltJobs);
   const awaiting=DB.quiltJobs.filter(j=>j.status!=='received');
   const flagRow=(cells)=>cells;
   const H=`
     <h2 class="section">Admin Dashboard</h2>
-    <p class="lead">Flags &amp; edits only you can see. Click any row to open the exact order.</p>
+    <div class="row" style="margin-bottom:10px"><p class="lead" style="margin:0">Flags &amp; edits only you can see. Click any row to open the exact order — or press Ignore to acknowledge a flag and move it to the Flag Log.</p>
+      <div class="spacer"></div>
+      <button class="btn ghost sm" onclick="go('admin');showAdmin('flaglog')">🔔 Flag Log${dismissedCount?` · ${dismissedCount} open`:''}</button></div>
     <div class="grid g4">
       <div class="kpi"><div class="v" style="color:${(woF.length+cuF.length+quF.length)?'var(--danger)':'var(--txt)'}">${woF.length+cuF.length+quF.length}</div><div class="l">Total Flags</div></div>
       <div class="kpi"><div class="v">${woF.length}</div><div class="l">WO Flags</div></div>
@@ -828,29 +948,32 @@ function renderAdminDash(){
       <div class="kpi"><div class="v">${quF.length}</div><div class="l">Quilting Flags</div></div>
     </div>`;
   // Section 1: Work Orders
-  const s1=`<div class="card"><div class="row"><b>① Work Orders</b><span class="tag">flagged over-usage &amp; edits</span></div>
-    <div style="margin-top:8px">${woF.length?`<table><thead><tr><th>WO #</th><th>Model</th><th>Customer</th><th>Flag reason</th></tr></thead><tbody>`+
-      woF.map(({o,f})=>`<tr onclick='viewWO(${JSON.stringify(o.id)})' style="cursor:pointer;background:#2a1518">
+  const s1=`<div class="card"><div class="row"><b>① Work Orders</b><span class="tag">flagged over-usage &amp; edits · click a row to open, or Ignore to move it to the Flag Log</span></div>
+    <div style="margin-top:8px">${woF.length?`<table><thead><tr><th>WO #</th><th>Model</th><th>Customer</th><th>Flag reason</th><th class="noprint"></th></tr></thead><tbody>`+
+      woF.map(({o,f})=>`<tr onclick='viewWO(${JSON.stringify(o.id)})' style="cursor:pointer;background:#fdecea">
         <td><b>${o.num}</b>${o.edited?' <span class="pill low">EDITED</span>':''}</td><td>${o.brand} · ${o.model}</td><td>${o.cust||'-'}</td>
-        <td>${statusPill('FLAG','crit')} <span class="small">${f.reasons.join('; ')}</span></td></tr>`).join('')+`</tbody></table>`
+        <td>${statusPill('FLAG','crit')} <span class="small">${f.reasons.join('; ')}</span></td>
+        <td class="num noprint"><button class="btn ghost sm" onclick='event.stopPropagation();dismissFlag("wo",${JSON.stringify(o.id)})'>Ignore</button></td></tr>`).join('')+`</tbody></table>`
       :`<p class="muted small">No flagged work orders. ✓</p>`}
       ${woE.length?`<div class="tag" style="margin-top:8px">Edited: `+woE.map(o=>`<a onclick='viewWO(${JSON.stringify(o.id)})' style="cursor:pointer;color:var(--warn)">#${o.num}${lastEdit(o)?' ('+lastEdit(o).by+')':''}</a>`).join(' · ')+`</div>`:''}
     </div></div>`;
   // Section 2: Block Cuttings
   const s2=`<div class="card"><div class="row"><b>② Block Cuttings</b><span class="tag">flagged wastage &amp; edits</span></div>
-    <div style="margin-top:8px">${cuF.length?`<table><thead><tr><th>Cut #</th><th>Grade</th><th>Flag reason</th></tr></thead><tbody>`+
-      cuF.map(({c,f})=>`<tr onclick='viewCut(${JSON.stringify(c.id)})' style="cursor:pointer;background:#2a1518">
+    <div style="margin-top:8px">${cuF.length?`<table><thead><tr><th>Cut #</th><th>Grade</th><th>Flag reason</th><th class="noprint"></th></tr></thead><tbody>`+
+      cuF.map(({c,f})=>`<tr onclick='viewCut(${JSON.stringify(c.id)})' style="cursor:pointer;background:#fdecea">
         <td><b>${c.no}</b>${c.edited?' <span class="pill low">EDITED</span>':''}</td><td>${cutGradeName(c)}</td>
-        <td>${statusPill('FLAG','crit')} <span class="small">${f.reason}</span></td></tr>`).join('')+`</tbody></table>`
+        <td>${statusPill('FLAG','crit')} <span class="small">${f.reason}</span></td>
+        <td class="num noprint"><button class="btn ghost sm" onclick='event.stopPropagation();dismissFlag("cut",${JSON.stringify(c.id)})'>Ignore</button></td></tr>`).join('')+`</tbody></table>`
       :`<p class="muted small">No flagged cuttings. ✓</p>`}
       ${cuE.length?`<div class="tag" style="margin-top:8px">Edited: `+cuE.map(c=>`<a onclick='viewCut(${JSON.stringify(c.id)})' style="cursor:pointer;color:var(--warn)">${c.no}${lastEdit(c)?' ('+lastEdit(c).by+')':''}</a>`).join(' · ')+`</div>`:''}
     </div></div>`;
   // Section 3: Quilting (flags + edits + return status)
   const s3=`<div class="card"><div class="row"><b>③ Quilting</b><span class="tag">flags, edits &amp; stock return status</span></div>
-    <div style="margin-top:8px">${quF.length?`<table><thead><tr><th>Job #</th><th>Quilter</th><th>Flag reason</th></tr></thead><tbody>`+
-      quF.map(({j,f})=>`<tr onclick='viewQuilt(${JSON.stringify(j.id)})' style="cursor:pointer;background:#2a1518">
+    <div style="margin-top:8px">${quF.length?`<table><thead><tr><th>Job #</th><th>Quilter</th><th>Flag reason</th><th class="noprint"></th></tr></thead><tbody>`+
+      quF.map(({j,f})=>`<tr onclick='viewQuilt(${JSON.stringify(j.id)})' style="cursor:pointer;background:#fdecea">
         <td><b>${j.no}</b>${j.edited?' <span class="pill low">EDITED</span>':''}</td><td>${j.quilter||'-'}</td>
-        <td>${statusPill('FLAG','crit')} <span class="small">${f.reason}</span></td></tr>`).join('')+`</tbody></table>`
+        <td>${statusPill('FLAG','crit')} <span class="small">${f.reason}</span></td>
+        <td class="num noprint"><button class="btn ghost sm" onclick='event.stopPropagation();dismissFlag("quilt",${JSON.stringify(j.id)})'>Ignore</button></td></tr>`).join('')+`</tbody></table>`
       :`<p class="muted small">No flagged quilting jobs. ✓</p>`}
       ${quE.length?`<div class="tag" style="margin-top:8px">Edited: `+quE.map(j=>`<a onclick='viewQuilt(${JSON.stringify(j.id)})' style="cursor:pointer;color:var(--warn)">${j.no}${lastEdit(j)?' ('+lastEdit(j).by+')':''}</a>`).join(' · ')+`</div>`:''}
       <div class="divider"></div><b class="small">Materials sent out — return status</b>
@@ -862,7 +985,17 @@ function renderAdminDash(){
           <td>${statusPill(st[0],st[1])}</td></tr>`;}).join('')||`<tr><td colspan="5" class="muted small">No quilting jobs.</td></tr>`}
       </tbody></table>
     </div></div>`;
-  document.getElementById('dashBody').innerHTML=H+s1+s2+s3;
+  // Section 4: Ingredient substitutions report
+  const subOrders=DB.orders.filter(o=>o.subs&&o.subs.length).slice().reverse();
+  const s4=`<div class="card"><div class="row"><b>④ Ingredient Substitutions</b><span class="tag">work orders where a material different from the product BOM was used</span></div>
+    <div style="margin-top:8px">${subOrders.length?`<table><thead><tr><th>WO #</th><th>Model</th><th>Customer</th><th>Substitutions (BOM layer → used)</th></tr></thead><tbody>`+
+      subOrders.map(o=>`<tr onclick='viewWO(${JSON.stringify(o.id)})' style="cursor:pointer">
+        <td><b>${o.num}</b>${o.edited?' <span class="pill low">EDITED</span>':''}<div class="tag">${o.date||''}</div></td>
+        <td>${o.brand} · ${o.model}</td><td>${o.cust||'-'}</td>
+        <td>${o.subs.map(s=>`<span class="pill low">${s.layer} → ${s.used}</span>`).join(' ')}</td></tr>`).join('')+`</tbody></table>`
+      :`<p class="muted small">No ingredient substitutions recorded. ✓</p>`}
+    </div></div>`;
+  document.getElementById('dashBody').innerHTML=H+s1+s2+s3+s4;
 }
 
 /* ============================ WORK ORDER ============================ */
@@ -901,9 +1034,53 @@ function onBrandChange(){
   curProd=null; renderCalc();
 }
 function onModelChange(){
+  if(WOCUSTOM)return;
   const id=document.getElementById('woModel').value;
   curProd=DB.products.find(p=>p.id===id)||null;
   if(curProd&&!editingWO)initActuals();
+  renderCalc();
+}
+/* ---- Custom BOM builder (one-off recipe inside the work order) ---- */
+let WOCUSTOM=false, WOCUSTLAYERS=[];
+function toggleCustom(){
+  WOCUSTOM=!!document.getElementById('woCustom').checked;
+  document.getElementById('woCustomBox').style.display=WOCUSTOM?'':'none';
+  document.getElementById('woBrand').disabled=WOCUSTOM;
+  document.getElementById('woModel').disabled=WOCUSTOM;
+  if(WOCUSTOM){
+    if(!WOCUSTLAYERS.length)WOCUSTLAYERS=[{mat:(DB.materials[0]||{}).id,rule:'foam_rem'}];
+    renderWOCustom(); rebuildCustomProd();
+  } else {
+    curProd=null; onModelChange(); renderCalc();
+  }
+}
+function renderWOCustom(){
+  const box=document.getElementById('woCustLayerBox'); if(!box)return;
+  box.innerHTML=WOCUSTLAYERS.map((l,i)=>{
+    const needThk=l.rule==='foam'; const needCnt=(l.rule==='spring'||l.rule==='fixed'); const needRate=l.rule==='area_rate';
+    const m=matById(l.mat)||{}; const rl=RULES[l.rule]||{}; const unit=rl.unit||m.unit||'';
+    let param;
+    if(needThk)param=`<input type="number" step="0.5" placeholder="thickness (in)" value="${l.thickness||''}" oninput="WOCUSTLAYERS[${i}].thickness=+this.value;rebuildCustomProd()">`;
+    else if(needCnt)param=`<input type="number" step="0.1" placeholder="qty per mattress" value="${l.count||''}" oninput="WOCUSTLAYERS[${i}].count=+this.value;rebuildCustomProd()">`;
+    else if(needRate)param=`<input type="number" step="0.001" placeholder="per sqft rate" value="${l.rate||''}" oninput="WOCUSTLAYERS[${i}].rate=+this.value;rebuildCustomProd()">`;
+    else param=`<span class="tag">auto from size</span>`;
+    return `<div style="border:1px solid var(--line);border-radius:8px;padding:10px;margin-bottom:8px">
+      <div class="layer-row">
+        <select onchange="WOCUSTLAYERS[${i}].mat=this.value;renderWOCustom();rebuildCustomProd()">${DB.materials.map(mm=>`<option value="${mm.id}" ${mm.id===l.mat?'selected':''}>${mm.name} · ${mm.cat}</option>`).join('')}</select>
+        <select onchange="WOCUSTLAYERS[${i}].rule=this.value;renderWOCustom();rebuildCustomProd()">${Object.entries(RULES).map(([k,v])=>`<option value="${k}" ${k===l.rule?'selected':''}>${v.label}</option>`).join('')}</select>
+        ${param}
+        <span class="chip">${unit||'?'}</span>
+        <button class="btn danger ghost sm" onclick="WOCUSTLAYERS.splice(${i},1);renderWOCustom();rebuildCustomProd()">✕</button>
+      </div></div>`;}).join('') || '<p class="muted small">No layers yet — add the fabric, foam/latex, spring and adhesive layers for this custom order.</p>';
+}
+function addWOCustLayer(){WOCUSTLAYERS.push({mat:(DB.materials[0]||{}).id,rule:'foam',thickness:1});renderWOCustom();rebuildCustomProd();}
+function rebuildCustomProd(){
+  if(!WOCUSTOM)return;
+  const brand=(document.getElementById('woCustBrand')||{}).value||'Custom';
+  const name=((document.getElementById('woCustName')||{}).value||'').trim()||'Custom';
+  const bw=+((document.getElementById('woCustBW')||{}).value)||82;
+  curProd={id:null,brand,name,borderWidth:bw,layers:WOCUSTLAYERS};
+  if(WOACT.length!==curProd.layers.length && !editingWO)initActuals();
   renderCalc();
 }
 function readDims(){return{
@@ -931,9 +1108,46 @@ function actualLine(i){
 function getResult(){
   const d=readDims(); const r=computeBOM(curProd,d);
   const lines=r.lines.map((l,i)=>{const a=actualLine(i);
-    return{name:l.name,unit:l.unit,usageNote:l.usageNote,recommended:l.total,
-      actual:a.val,entered:a.entered,contingent:a.entered?(a.val-l.total):null};});
+    const A=WOACT[i]||{};
+    let sheets=null, subUsed=null;
+    if(A.type==='cft'){
+      sheets=(A.rows||[]).filter(rw=>rw.l&&rw.w&&rw.t&&rw.qty)
+        .map(rw=>({mat:(matById(rw.mat)||{}).name||'',l:rw.l,w:rw.w,t:rw.t,qty:rw.qty}));
+    } else if(A.subMat){
+      subUsed=(matById(A.subMat)||{}).name||null;
+    }
+    return{name:l.name,unit:l.unit,usageNote:l.usageNote,recommended:l.total,matId:l.matId,
+      actual:a.val,entered:a.entered,contingent:a.entered?(a.val-l.total):null,sheets,subUsed};});
   return{lines,errors:r.errors,dims:d};
+}
+// Human-readable description of the foam sizes / material Shiva actually entered.
+// One line per sheet type: "3 pcs - 78x72x2 = 5.850 cft" with its own cubic feet.
+function lineDetailRows(l){
+  if(l.sheets&&l.sheets.length)
+    return l.sheets.map(s=>{const cft=(s.l*s.w*s.t/1728)*s.qty;
+      return `${s.qty} pcs - ${s.l}x${s.w}x${s.t} = ${fmt(cft,3)} cft${(s.mat&&s.mat!==l.name)?' ['+s.mat+']':''}`;});
+  if(l.subUsed&&l.subUsed!==l.name) return ['Used: '+l.subUsed];
+  return l.usageNote?[l.usageNote]:[];
+}
+function lineDetailHTML(l){const r=lineDetailRows(l);return r.length?r.join('<br>'):'—';}
+function lineDetailText(l){const r=lineDetailRows(l);return r.length?r.join('\n'):'-';}
+// Which layers were fulfilled with a material different from the product BOM
+function orderSubs(lines){
+  const subs=[];
+  (lines||[]).forEach(l=>{
+    if(l.sheets&&l.sheets.length){
+      [...new Set(l.sheets.map(s=>s.mat).filter(nm=>nm&&nm!==l.name))]
+        .forEach(nm=>subs.push({layer:l.name,used:nm}));
+    } else if(l.subUsed&&l.subUsed!==l.name){
+      subs.push({layer:l.name,used:l.subUsed});
+    }
+  });
+  return subs;
+}
+function setSubMat(i,v){
+  const a=WOACT[i]; if(!a)return;
+  a.subMat=(v===''?null:v);
+  if(a.type==='cft' && v){ (a.rows||[]).forEach(r=>r.mat=v); renderCalc(); }
 }
 // ---- render full calculator ----
 function renderCalc(){
@@ -945,6 +1159,7 @@ function renderCalc(){
   if(r.errors.length){errB.className='banner err';errB.innerHTML='⚠ '+r.errors.join(' ');}
   else{errB.className='banner';errB.innerHTML='';}
   const foams=foamMats();
+  const allowSub=!!(document.getElementById('woAllowSub')&&document.getElementById('woAllowSub').checked);
   out.innerHTML=r.lines.map((l,i)=>{
     const a=WOACT[i]||{type:'val',value:''};
     const act=actualLine(i);
@@ -968,10 +1183,24 @@ function renderCalc(){
           <span class="cftout" id="cft_${i}_${j}">${cft} cft</span>
           <button class="btn danger ghost sm" onclick="delSheet(${i},${j})">✕</button></div>`;
       }).join('');
-      body=`<div class="sheetwrap">${rows||'<p class="muted small" style="margin:4px 0">No sheets recorded yet.</p>'}
+      let subSel='';
+      if(allowSub){
+        const cur=a.subMat||(a.rows[0]&&a.rows[0].mat)||l.matId;
+        const opts=foams.map(m=>`<option value="${m.id}" ${m.id===cur?'selected':''}>${m.name} · ${m.cat}</option>`).join('');
+        subSel=`<div class="row" style="margin-bottom:8px"><label class="tag">Material used for this layer (substitute if changed):</label>
+          <select style="max-width:280px" onchange="setSubMat(${i},this.value)">${opts}</select></div>`;
+      }
+      body=`<div class="sheetwrap">${subSel}${rows||'<p class="muted small" style="margin:4px 0">No sheets recorded yet.</p>'}
         <button class="btn ghost sm" onclick="addSheet(${i})">+ Add foam sheet used</button></div>`;
     } else {
-      body=`<div class="row"><label class="tag">Actual used (${l.unit}):</label>
+      let subSel='';
+      if(allowSub){
+        const cur=a.subMat||l.matId;
+        const opts=DB.materials.map(m=>`<option value="${m.id}" ${m.id===cur?'selected':''}>${m.name} · ${m.cat}</option>`).join('');
+        subSel=`<div class="row" style="margin-bottom:6px"><label class="tag">Material used (substitute if changed):</label>
+          <select style="max-width:280px" onchange="setSubMat(${i},this.value)">${opts}</select></div>`;
+      }
+      body=subSel+`<div class="row"><label class="tag">Actual used (${l.unit}):</label>
         <input type="number" step="0.001" style="max-width:160px" value="${a.value}" oninput="setVal(${i},this.value)" placeholder="metres / pcs used"></div>`;
     }
     return `<div class="lncard">
@@ -1009,18 +1238,22 @@ function applyPreset(i,j,k){if(k==='')return;const m=matById(WOACT[i].rows[j].ma
   Object.assign(WOACT[i].rows[j],{l:s.l,w:s.w,t:s.t});if(!WOACT[i].rows[j].qty)WOACT[i].rows[j].qty=1;renderCalc();}
 function addSheet(i){const line=computeBOM(curProd,readDims()).lines[i];
   let mat=(matById(line.matId)&&matById(line.matId).cat==='Foam')?line.matId:(foamMats()[0]||{}).id;
+  if(WOACT[i].subMat)mat=WOACT[i].subMat;
   WOACT[i].rows.push({mat,l:'',w:'',t:'',qty:1});renderCalc();}
 function delSheet(i,j){WOACT[i].rows.splice(j,1);renderCalc();}
 
 function formToOrder(){
   const res=getResult();
-  return {res, o:{brand:curProd.brand,model:curProd.name,productId:curProd.id,
+  return {res, o:{brand:curProd.brand,model:curProd.name,productId:curProd.id||null,
+    custom:!!WOCUSTOM, custLayers:WOCUSTOM?JSON.parse(JSON.stringify(curProd.layers)):undefined, borderWidth:curProd.borderWidth,
     cust:val('woCust'),city:val('woCity'),agent:val('woAgent'),delivery:val('woDelivery'),
-    ...res.dims,lines:res.lines,act:JSON.parse(JSON.stringify(WOACT))}};
+    ...res.dims,lines:res.lines,subs:orderSubs(res.lines),act:JSON.parse(JSON.stringify(WOACT))}};
 }
 function val(id){return document.getElementById(id).value.trim();}
 function saveWO(){
-  if(!curProd){alert("Select a brand and model first.");return;}
+  if(!curProd){alert("Select a brand and model first, or turn on Custom order and add layers.");return;}
+  if(WOCUSTOM){ if(!(curProd.layers&&curProd.layers.length)){alert("Add at least one layer to the custom BOM.");return;}
+    if(!((document.getElementById('woCustName').value||'').trim())){alert("Enter a custom name / reference.");return;} }
   const {res,o}=formToOrder();
   if(res.errors.length){alert("Fix the highlighted errors before saving:\n\n"+res.errors.join("\n"));return;}
   if(!o.cust){alert("Enter a customer name.");return;}
@@ -1039,20 +1272,43 @@ function resetWOForm(){
   ['woCust','woCity','woAgent','woDelivery','woL','woW','woH'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('woQ').value=1;
   document.getElementById('woBrand').value='';document.getElementById('woModel').innerHTML='<option value="">— select model —</option>';
+  const sc=document.getElementById('woAllowSub'); if(sc)sc.checked=false;
+  WOCUSTOM=false; WOCUSTLAYERS=[];
+  const cc=document.getElementById('woCustom'); if(cc)cc.checked=false;
+  document.getElementById('woCustomBox').style.display='none';
+  document.getElementById('woBrand').disabled=false; document.getElementById('woModel').disabled=false;
+  document.getElementById('woCustName').value='';
   WOACT=[]; renderCalc(); initCreateWO();
 }
 function editWO(id){
   const o=DB.orders.find(x=>x.id===id); if(!o)return;
   editingWO=id; WO_SUB='create';
-  const p=DB.products.find(x=>x.id===o.productId)||DB.products.find(x=>x.brand===o.brand&&x.name===o.model);
   showWO('create');
-  document.getElementById('woBrand').value=o.brand; onBrandChange();
-  if(p){document.getElementById('woModel').value=p.id; curProd=p;}
+  const cc=document.getElementById('woCustom');
+  if(o.custom){
+    WOCUSTOM=true; if(cc)cc.checked=true;
+    WOCUSTLAYERS=JSON.parse(JSON.stringify(o.custLayers||[]));
+    document.getElementById('woCustomBox').style.display='';
+    document.getElementById('woBrand').disabled=true; document.getElementById('woModel').disabled=true;
+    const bsel=document.getElementById('woCustBrand'); if(bsel && o.brand)bsel.value=o.brand;
+    document.getElementById('woCustName').value=o.model||'';
+    document.getElementById('woCustBW').value=o.borderWidth||82;
+    renderWOCustom();
+    curProd={id:null,brand:o.brand,name:o.model,borderWidth:o.borderWidth||82,layers:WOCUSTLAYERS};
+  } else {
+    WOCUSTOM=false; if(cc)cc.checked=false;
+    document.getElementById('woCustomBox').style.display='none';
+    document.getElementById('woBrand').disabled=false; document.getElementById('woModel').disabled=false;
+    const p=DB.products.find(x=>x.id===o.productId)||DB.products.find(x=>x.brand===o.brand&&x.name===o.model);
+    document.getElementById('woBrand').value=o.brand; onBrandChange();
+    if(p){document.getElementById('woModel').value=p.id; curProd=p;}
+  }
   document.getElementById('woCust').value=o.cust||'';document.getElementById('woCity').value=o.city||'';
   document.getElementById('woAgent').value=o.agent||'';document.getElementById('woDelivery').value=o.delivery||'';
   document.getElementById('woL').value=o.L;document.getElementById('woW').value=o.W;
   document.getElementById('woH').value=o.H;document.getElementById('woQ').value=o.Q;
   WOACT=o.act?JSON.parse(JSON.stringify(o.act)):[]; if(!WOACT.length)initActuals();
+  const sc=document.getElementById('woAllowSub'); if(sc)sc.checked=!!(o.subs&&o.subs.length);
   document.getElementById('woNumChip').textContent='Editing WO #: '+o.num;
   document.getElementById('woDateChip').textContent='📅 '+(o.date||'');
   renderCalc();
@@ -1060,9 +1316,15 @@ function editWO(id){
 function delWO(id){const o=DB.orders.find(x=>x.id===id);
   if(confirm("Delete work order "+o.num+"?")){DB.orders=DB.orders.filter(x=>x.id!==id);save();renderWOAll();}}
 function inRange(d,from,to){if(from&&d<from)return false;if(to&&d>to)return false;return true;}
+function clearWOFilter(){['woFrom','woTo','woFCust','woFModel'].forEach(id=>{const e=document.getElementById(id);if(e)e.value='';});renderWOAll();}
 function renderWOAll(){
   const from=document.getElementById('woFrom').value,to=document.getElementById('woTo').value;
-  const list=DB.orders.filter(o=>inRange(o.date||'',from,to)).slice().reverse();
+  const fc=(document.getElementById('woFCust').value||'').trim().toLowerCase();
+  const fm=(document.getElementById('woFModel').value||'').trim().toLowerCase();
+  fillDL('dlModelAll',uniq(DB.orders.map(o=>o.model)));
+  const list=DB.orders.filter(o=>inRange(o.date||'',from,to)
+    && (!fc || (o.cust||'').toLowerCase().includes(fc))
+    && (!fm || (o.model||'').toLowerCase().includes(fm))).slice().reverse();
   document.getElementById('woCount').textContent=list.length+' of '+DB.orders.length;
   document.getElementById('woAllList').innerHTML= list.length?`<table><thead><tr>
     <th>WO #</th><th>Date</th><th>Brand · Model</th><th>Customer</th><th>City</th><th>Agent</th><th class="num">Size</th><th class="num">Qty</th><th class="noprint"></th>
@@ -1093,13 +1355,15 @@ function woSheetHTML(o){
       <div style="border-right:none"><div class="lbl">Quantity</div><div class="val">${o.Q}</div></div>
     </div>
     <h4>RAW MATERIAL BREAKUP</h4>
-    <table><thead><tr><th style="text-align:left">Product</th><th style="text-align:center">Recommended</th><th style="text-align:center">Actual</th><th style="text-align:center">Contingent</th><th style="text-align:center">Metric</th></tr></thead><tbody>
+    <table><thead><tr><th style="text-align:left">Product</th><th style="text-align:left">Sizes / details entered</th><th style="text-align:center">Recommended</th><th style="text-align:center">Actual</th><th style="text-align:center">Contingent</th><th style="text-align:center">Metric</th></tr></thead><tbody>
     ${(o.lines||[]).map(l=>`<tr><td style="text-align:left">${l.name}</td>
+      <td style="text-align:left;white-space:nowrap">${lineDetailHTML(l)}</td>
       <td style="text-align:center">${fmt(l.recommended,3)}</td>
       <td style="text-align:center">${l.entered?fmt(l.actual,3):'—'}</td>
       <td style="text-align:center">${l.contingent==null?'—':(l.contingent>0?'+':'')+fmt(l.contingent,3)}</td>
       <td style="text-align:center">${l.unit}</td></tr>`).join('')}
     </tbody></table>
+    ${(o.subs&&o.subs.length)?`<div style="padding:10px 14px" class="tag"><b>Substitutions:</b> ${o.subs.map(s=>`${s.layer} → ${s.used}`).join(' · ')}</div>`:''}
     <div style="padding:12px 14px" class="tag">Delivery: ${o.delivery||'-'}</div>
   </div>`;
 }
@@ -1423,7 +1687,10 @@ function completeCut(id){
     <div id="cutResBox" style="margin-top:8px"></div>
     <div class="grid g2" style="margin-top:12px">
       <div><label class="f">Skin thickness removed (in)</label><input id="rSkin" type="number" step="0.25" value="${c.result?c.result.skinThk:''}" oninput="cutReconcile('${id}')" placeholder="e.g. 0.5"></div>
-      <div><label class="f">Other wastage (CFT)</label><input id="rWaste" type="number" step="0.001" value="${c.result?c.result.wastage:''}" oninput="cutReconcile('${id}')" placeholder="reusable scrap"></div>
+      <div><label class="f">Contingent (CFT)</label><input id="rCont" type="number" step="0.001" value="${c.result?(c.result.contingent||''):''}" oninput="cutReconcile('${id}')" placeholder="allowance / expansion"></div>
+      <div><label class="f">Wastage (CFT)</label><input id="rWaste" type="number" step="0.001" value="${c.result?c.result.wastage:''}" oninput="cutReconcile('${id}')" placeholder="reusable scrap"></div>
+      <div><label class="f">Other CFT (unaccounted)</label><input id="rOther" type="number" step="0.001" value="${c.result?(c.result.otherCFT||''):''}" oninput="cutReconcile('${id}')" placeholder="any other CFT"></div>
+      <div style="grid-column:1/3"><label class="f">Reason for any other CFT (beyond wastage &amp; contingent)</label><input id="rOtherReason" value="${c.result?(c.result.otherReason||''):''}" placeholder="e.g. block undersized, moisture loss, mis-cut"></div>
       <div style="grid-column:1/3"><label class="f">Notes</label><input id="rNotes" value="${c.result?(c.result.notes||''):''}"></div>
     </div>
     <div class="banner info" id="reconBox" style="display:block"></div>
@@ -1448,11 +1715,13 @@ function cutReconcile(id){
     const el=document.getElementById('crc_'+i);if(el)el.textContent=fmt(cf,3)+' cft';});
   const skin=+((document.getElementById('rSkin')||{}).value)||0;
   const skinCFT=(c.L*c.W*skin/1728)*(c.qty||1);
+  const cont=+((document.getElementById('rCont')||{}).value)||0;
   const waste=+((document.getElementById('rWaste')||{}).value)||0;
-  const bal=bl-sheetsCFT-skinCFT-waste;
+  const other=+((document.getElementById('rOther')||{}).value)||0;
+  const bal=bl-sheetsCFT-skinCFT-cont-waste-other;
   const yld=bl?100*sheetsCFT/bl:0;
   const rb=document.getElementById('reconBox');
-  if(rb)rb.innerHTML=`Block: <b>${fmt(bl,3)}</b> CFT &nbsp;=&nbsp; Sheets <b>${fmt(sheetsCFT,3)}</b> + Skin <b>${fmt(skinCFT,3)}</b> + Wastage <b>${fmt(waste,3)}</b> &nbsp;→&nbsp; Unaccounted: <b>${fmt(bal,3)}</b> CFT · Yield <b>${fmt(yld,1)}%</b>`;
+  if(rb)rb.innerHTML=`Block: <b>${fmt(bl,3)}</b> CFT &nbsp;=&nbsp; Sheets <b>${fmt(sheetsCFT,3)}</b> + Skin <b>${fmt(skinCFT,3)}</b> + Contingent <b>${fmt(cont,3)}</b> + Wastage <b>${fmt(waste,3)}</b> + Other <b>${fmt(other,3)}</b> &nbsp;→&nbsp; Unaccounted: <b>${fmt(bal,3)}</b> CFT · Yield <b>${fmt(yld,1)}%</b>`;
 }
 function saveCutResult(id){
   const c=DB.cuts.find(x=>x.id===id);
@@ -1463,9 +1732,12 @@ function saveCutResult(id){
   let sheetsCFT=0; sheets.forEach(p=>sheetsCFT+=(c.L*c.W*p.thk/1728)*p.count);
   const skin=+document.getElementById('rSkin').value||0;
   const skinCFT=(c.L*c.W*skin/1728)*(c.qty||1);
+  const cont=+document.getElementById('rCont').value||0;
   const waste=+document.getElementById('rWaste').value||0;
-  c.result={sheets,skinThk:skin,skinCFT,wastage:waste,sheetsCFT,blockCFT:bl,
-    balance:bl-sheetsCFT-skinCFT-waste,notes:document.getElementById('rNotes').value,date:today()};
+  const other=+document.getElementById('rOther').value||0;
+  const otherReason=document.getElementById('rOtherReason').value;
+  c.result={sheets,skinThk:skin,skinCFT,contingent:cont,wastage:waste,otherCFT:other,otherReason,sheetsCFT,blockCFT:bl,
+    balance:bl-sheetsCFT-skinCFT-cont-waste-other,notes:document.getElementById('rNotes').value,date:today()};
   c.status='completed';
   if(wasResult)logEdit(c);
   // Feed fresh sheets back into the foam's stock + register sheet sizes
@@ -1488,16 +1760,63 @@ function buildCutSheet(c){
       <div><div class="lbl">Invoice #</div><div class="val">${c.invoiceNo||'-'}</div></div>
       <div><div class="lbl">Status</div><div class="val">${c.status==='completed'?'Done':'Issued'}</div></div>
       <div style="border-right:none"><div class="lbl">Yield</div><div class="val">${done?fmt(done.blockCFT?100*done.sheetsCFT/done.blockCFT:0,1)+'%':'—'}</div></div></div>
-    <h4>THICKNESSES TO CUT</h4>
-    <table><thead><tr><th style="text-align:left">Sheet thickness</th><th style="text-align:center">Qty planned</th><th style="text-align:center">Actual out</th><th style="text-align:center">Wastage</th></tr></thead><tbody>
+    <h4>BLOCK vs SHEETS — CUBIC FEET</h4>
+    <div class="meta" style="grid-template-columns:repeat(4,1fr)">
+      <div><div class="lbl">Block volume (CFT)</div><div class="val">${fmt(blockCFT(c),3)}</div></div>
+      <div><div class="lbl">Sheets cut (CFT)</div><div class="val">${done?fmt(done.sheetsCFT,3):'____'}</div></div>
+      <div><div class="lbl">Skin+Cont+Waste+Other (CFT)</div><div class="val">${done?fmt((done.skinCFT||0)+(done.contingent||0)+(done.wastage||0)+(done.otherCFT||0),3):'____'}</div></div>
+      <div style="border-right:none"><div class="lbl">Yield</div><div class="val">${done?fmt(done.blockCFT?100*done.sheetsCFT/done.blockCFT:0,1)+'%':'____'}</div></div>
+    </div>
+    <h4>THICKNESSES CUT</h4>
+    <table><thead><tr><th style="text-align:left">Sheet thickness</th><th style="text-align:center">Qty planned</th><th style="text-align:center">Actual out</th><th style="text-align:center">Sheet CFT (actual)</th></tr></thead><tbody>
     ${c.planned.map(p=>{const r=done&&c.result.sheets.find(s=>s.thk===p.thk);
-      return `<tr><td style="text-align:left">${p.thk}"</td><td style="text-align:center">${p.count}</td><td style="text-align:center">${r?r.count:'____'}</td><td style="text-align:center">____</td></tr>`;}).join('')}
+      const cft=r?(c.L*c.W*p.thk/1728)*r.count:null;
+      return `<tr><td style="text-align:left">${p.thk}"</td><td style="text-align:center">${p.count}</td><td style="text-align:center">${r?r.count:'____'}</td><td style="text-align:center">${cft!=null?fmt(cft,3):'____'}</td></tr>`;}).join('')}
+    ${done?(c.result.sheets.filter(s=>!c.planned.some(p=>p.thk===s.thk)).map(s=>{const cft=(c.L*c.W*s.thk/1728)*s.count;
+      return `<tr><td style="text-align:left">${s.thk}" <span class="tag">(extra)</span></td><td style="text-align:center">—</td><td style="text-align:center">${s.count}</td><td style="text-align:center">${fmt(cft,3)}</td></tr>`;}).join('')):''}
+    ${done?`<tr><td style="text-align:left"><b>Total sheets cut</b></td><td style="text-align:center"></td><td style="text-align:center"></td><td style="text-align:center"><b>${fmt(done.sheetsCFT,3)} CFT</b></td></tr>`:''}
     </tbody></table>
-    ${done?`<div style="padding:10px 14px" class="tag">Skin: ${done.skinThk}" (${fmt(done.skinCFT,3)} CFT) · Wastage: ${fmt(done.wastage,3)} CFT · Sheets out: ${fmt(done.sheetsCFT,3)} CFT</div>`:
-      `<div style="padding:10px 14px" class="tag">Cutting guy: note actual sheets &amp; wastage above. Skin thickness: ______ in</div>`}
+    ${done?`<div style="padding:10px 14px" class="tag">Skin: ${done.skinThk}" (${fmt(done.skinCFT,3)} CFT) · Contingent: ${fmt(done.contingent||0,3)} CFT · Wastage: ${fmt(done.wastage,3)} CFT · Other: ${fmt(done.otherCFT||0,3)} CFT · Sheets out: ${fmt(done.sheetsCFT,3)} CFT of ${fmt(blockCFT(c),3)} CFT block${(done.balance!=null&&Math.abs(done.balance)>=0.001)?` · Unaccounted: ${fmt(done.balance,3)} CFT`:''}</div>
+    ${done.otherReason?`<div style="padding:0 14px 12px 14px" class="tag"><b>Other CFT reason:</b> ${done.otherReason}</div>`:''}`:
+      `<div style="padding:10px 14px" class="tag">Cutting guy: note actual sheets, contingent, wastage &amp; any other CFT above. Skin thickness: ______ in</div>`}
   </div>`;
 }
 function printCut(id){docPDF('cut',id);}
+
+/* ============================ OTHERS (miscellaneous notes / log) ============================ */
+function renderOthers(){
+  const box=document.getElementById('othersList'); if(!box)return;
+  const list=(DB.others||[]).slice().reverse();
+  box.innerHTML= list.length?`<table><thead><tr><th>Date</th><th>Category</th><th>Title</th><th>Note</th><th>By</th><th class="noprint"></th></tr></thead><tbody>`+
+    list.map(o=>`<tr><td>${o.date||''}</td><td>${o.category?`<span class="chip">${o.category}</span>`:''}</td>
+      <td><b>${(o.title||'-').replace(/</g,'&lt;')}</b></td><td class="small">${(o.note||'').replace(/</g,'&lt;')}</td><td class="tag">${o.by||''}</td>
+      <td class="num noprint"><button class="btn ghost sm" onclick='editOther(${JSON.stringify(o.id)})'>Edit</button>
+        <button class="btn danger ghost sm" onclick='delOther(${JSON.stringify(o.id)})'>✕</button></td></tr>`).join('')
+    +`</tbody></table>`:`<p class="muted small" style="padding:14px">No entries yet. Add notes, reminders or anything miscellaneous.</p>`;
+}
+function editOther(id){
+  const o=id?(DB.others||[]).find(x=>x.id===id):{title:'',note:'',category:'',date:today()};
+  openModal(`<div class="row"><b style="font-size:16px">${id?'Edit':'New'} entry</b><div class="spacer"></div>
+      <button class="btn ghost sm" onclick="closeModal()">Cancel</button></div>
+    <div class="grid g2" style="margin-top:12px">
+      <div><label class="f">Date</label><input id="oDate" type="date" value="${o.date||today()}"></div>
+      <div><label class="f">Category (optional)</label><input id="oCat" value="${o.category||''}" placeholder="e.g. reminder, supplier, misc"></div>
+      <div style="grid-column:1/3"><label class="f">Title</label><input id="oTitle" value="${(o.title||'').replace(/"/g,'&quot;')}"></div>
+      <div style="grid-column:1/3"><label class="f">Note</label><textarea id="oNote" rows="4">${o.note||''}</textarea></div>
+    </div>
+    <div class="divider"></div>
+    <div class="row">${id?`<button class="btn danger ghost sm" onclick='delOther(${JSON.stringify(id)})'>Delete</button>`:''}
+      <div class="spacer"></div><button class="btn g" onclick='commitOther(${JSON.stringify(id)})'>Save entry</button></div>`);
+}
+function commitOther(id){
+  const v=x=>document.getElementById(x).value;
+  const o={date:v('oDate'),category:v('oCat').trim(),title:v('oTitle').trim(),note:v('oNote').trim()};
+  if(!o.title&&!o.note){alert("Enter a title or a note.");return;}
+  if(id){Object.assign((DB.others||[]).find(x=>x.id===id),o);}
+  else{o.id=uid();o.by=(CURRENT_USER?CURRENT_USER.name:'');DB.others=DB.others||[];DB.others.push(o);}
+  save();closeModal();renderOthers();
+}
+function delOther(id){if(confirm("Delete this entry?")){DB.others=(DB.others||[]).filter(x=>x.id!==id);save();closeModal();renderOthers();}}
 
 /* ============================ QUILTING JOBS ============================ */
 let QUILT_SUB='create';
@@ -1516,7 +1835,7 @@ function renderQuiltAll(){
   document.getElementById('quiltAllList').innerHTML= list.length?`<table><thead><tr>
     <th>Job #</th><th>Date</th><th>Quilter</th><th>Fabric</th><th class="num">Issued</th><th class="num">Received</th><th>Lots</th><th>Status</th><th class="noprint"></th>
     </tr></thead><tbody>`+list.map(j=>{const rc=quiltRecv(j);const st=j.status==='received'?'CLOSED':(rc>0?'PARTIAL':'ISSUED');
-      return `<tr><td><b>${j.no}</b>${j.edited?' <span class="pill low">EDITED</span>':''}</td><td>${j.date||''}</td><td>${j.quilter||'-'}</td><td>${j.fabric||'-'}</td>
+      return `<tr><td><b>${j.no}</b>${j.edited?' <span class="pill low">EDITED</span>':''}</td><td>${j.date||''}</td><td>${j.quilter||'-'}</td><td>${(j.sets&&j.sets.length>1)?('<b>'+j.sets.length+' sets</b> · '):''}${j.fabric||'-'}</td>
       <td class="num">${j.fabM||0}m</td><td class="num">${fmt(rc,1)}m</td><td>${(j.receipts||[]).length}</td>
       <td><span class="pill ${st==='CLOSED'?'ok':'low'}">${st}</span></td>
       <td class="num noprint">
@@ -1549,7 +1868,7 @@ function renderQuilting(){
       const st=j.status==='received'?'CLOSED':(rc>0?'PARTIAL':'ISSUED');
       return `<tr>
       <td><b>${j.no}</b><div class="tag">${j.date||''}</div></td><td>${j.quilter||'-'}</td>
-      <td>${j.fabric||'-'}<div class="tag">${j.foam||''} ${j.foamM?('· '+j.foamM+'m foam'):''}</div></td>
+      <td>${(j.sets&&j.sets.length>1)?('<b>'+j.sets.length+' sets</b> · '):''}${j.fabric||'-'}<div class="tag">${j.foam||''} ${j.foamM?('· '+fmt(j.foamM,1)+'m foam'):''}</div></td>
       <td class="num">${j.fabM||'-'}</td>
       <td class="num"><b>${fmt(rc,1)}</b></td>
       <td class="num">${j.status==='received'?'—':fmt(rem,1)}</td>
@@ -1561,27 +1880,58 @@ function renderQuilting(){
         <button class="btn ghost sm" onclick='editQuilt(${JSON.stringify(j.id)})'>Edit</button></td></tr>`;}).join('')
     +`</tbody></table>`:`<p class="muted small">No quilting jobs yet.</p>`;
 }
+let QSETS=[];
 function editQuilt(id){
   const j=id?DB.quiltJobs.find(x=>x.id===id):{no:'QJ-'+DB.quiltSeq,date:new Date().toISOString().slice(0,10)};
+  QSETS=id?JSON.parse(JSON.stringify(quiltSets(j))):[{fabric:'',fabM:'',foam:'',foamM:''}];
   openModal(`<div class="row"><b style="font-size:16px">${id?'Edit':'New'} Quilting Job</b><div class="spacer"></div>
       <button class="btn ghost sm" onclick="closeModal()">Cancel</button></div>
-    <div class="grid g2" style="margin-top:12px">
+    <div class="grid g3" style="margin-top:12px">
       <div><label class="f">Job order #</label><input id="qNo" value="${j.no}"></div>
       <div><label class="f">Date issued</label><input id="qDate" type="date" value="${j.date||''}"></div>
-      <div style="grid-column:1/3"><label class="f">Quilter</label><input id="qQuilter" value="${j.quilter||''}"></div>
-      <div><label class="f">Fabric sent</label><input id="qFabric" value="${j.fabric||''}" placeholder="e.g. 240 GSM Knitted"></div>
-      <div><label class="f">Fabric length (m)</label><input id="qFabM" type="number" value="${j.fabM||''}"></div>
-      <div><label class="f">Quilting foam sent</label><input id="qFoam" value="${j.foam||''}" placeholder="e.g. 6mm quilting foam roll"></div>
-      <div><label class="f">Foam length (m)</label><input id="qFoamM" type="number" value="${j.foamM||''}"></div>
+      <div><label class="f">Quilter</label><input id="qQuilter" value="${j.quilter||''}"></div>
+    </div>
+    <div class="divider"></div>
+    <div class="row"><b>Product sets</b><span class="tag">each set = one fabric + its quilting foam · up to 12</span><div class="spacer"></div>
+      <button class="btn sm" onclick="addQSet()">+ Add set</button></div>
+    <div id="qSetBox" style="margin-top:8px"></div>
+    <div class="banner info" id="qSetTot" style="display:block"></div>
+    <div class="grid g2">
       <div style="grid-column:1/3"><label class="f">Notes</label><input id="qNotes" value="${j.notes||''}"></div>
     </div>
     <div class="row"><div class="spacer"></div><button class="btn g" onclick='commitQuilt(${JSON.stringify(id)})'>Save &amp; issue</button></div>`);
+  renderQSets();
 }
+function renderQSets(){
+  const box=document.getElementById('qSetBox'); if(!box)return;
+  box.innerHTML=QSETS.map((s,i)=>`
+    <div style="border:1px solid var(--line);border-radius:8px;padding:10px;margin-bottom:8px">
+      <div class="row" style="margin-bottom:6px"><b class="small">Set ${i+1}</b><div class="spacer"></div>
+        <button class="btn danger ghost sm" onclick="QSETS.splice(${i},1);renderQSets()">✕</button></div>
+      <div class="grid g2">
+        <div><label class="f">Fabric sent</label><input value="${s.fabric||''}" oninput="QSETS[${i}].fabric=this.value;qSetTotals()" placeholder="e.g. 240 GSM Knitted"></div>
+        <div><label class="f">Fabric length (m)</label><input type="number" value="${s.fabM||''}" oninput="QSETS[${i}].fabM=+this.value;qSetTotals()"></div>
+        <div><label class="f">Quilting foam sent</label><input value="${s.foam||''}" oninput="QSETS[${i}].foam=this.value;qSetTotals()" placeholder="e.g. 6mm quilting foam roll"></div>
+        <div><label class="f">Foam length (m)</label><input type="number" value="${s.foamM||''}" oninput="QSETS[${i}].foamM=+this.value;qSetTotals()"></div>
+      </div>
+    </div>`).join('')||'<p class="muted small">Add at least one product set.</p>';
+  qSetTotals();
+}
+function qSetTotals(){const el=document.getElementById('qSetTot');if(!el)return;
+  const fab=QSETS.reduce((a,s)=>a+(+s.fabM||0),0), fo=QSETS.reduce((a,s)=>a+(+s.foamM||0),0);
+  el.innerHTML=`${QSETS.length} set(s) · Total fabric <b>${fmt(fab,1)}m</b> · Total quilting foam <b>${fmt(fo,1)}m</b>`;}
+function addQSet(){ if(QSETS.length>=12){alert("Up to 12 sets per job.");return;} QSETS.push({fabric:'',fabM:'',foam:'',foamM:''});renderQSets(); }
 function commitQuilt(id){
   const v=x=>document.getElementById(x).value;
+  const sets=QSETS.map(s=>({fabric:(s.fabric||'').trim(),fabM:+s.fabM||0,foam:(s.foam||'').trim(),foamM:+s.foamM||0}))
+    .filter(s=>s.fabric||s.foam||s.fabM||s.foamM);
   const o={no:v('qNo').trim(),date:v('qDate'),quilter:v('qQuilter').trim(),
-    fabric:v('qFabric').trim(),fabM:+v('qFabM')||0,foam:v('qFoam').trim(),foamM:+v('qFoamM')||0,notes:v('qNotes').trim()};
+    sets, fabM:sets.reduce((a,s)=>a+s.fabM,0), foamM:sets.reduce((a,s)=>a+s.foamM,0),
+    fabric:sets.map(s=>s.fabric).filter(Boolean).join(', '),
+    foam:sets.map(s=>s.foam).filter(Boolean).join(', '),
+    notes:v('qNotes').trim()};
   if(!o.quilter){alert("Quilter name required.");return;}
+  if(!sets.length){alert("Add at least one product set (fabric + foam).");return;}
   if(id){const j=DB.quiltJobs.find(x=>x.id===id);Object.assign(j,o);logEdit(j);}
   else{o.id=uid();o.status='issued';o.receipts=[];DB.quiltJobs.push(o);DB.quiltSeq++;}
   save();closeModal();renderQuiltTab();
@@ -1623,10 +1973,10 @@ function buildQuiltSheet(j){
       <div><div class="lbl">Date issued</div><div class="val">${j.date||''}</div></div>
       <div><div class="lbl">Status</div><div class="val">${j.status==='received'?'Received':'Issued'}</div></div>
       <div style="border-right:none"><div class="lbl">Received</div><div class="val">${fmt(quiltRecv(j),1)} / ${j.fabM||0} m</div></div></div>
-    <h4>MATERIALS SENT</h4>
-    <table><thead><tr><th>Item</th><th class="num">Length (m)</th></tr></thead><tbody>
-      <tr><td>${j.fabric||'Fabric'}</td><td class="num">${j.fabM||0}</td></tr>
-      <tr><td>${j.foam||'Quilting foam'}</td><td class="num">${j.foamM||0}</td></tr>
+    <h4>MATERIALS SENT — PRODUCT SETS</h4>
+    <table><thead><tr><th>Set</th><th>Fabric</th><th class="num">Fabric (m)</th><th>Quilting foam</th><th class="num">Foam (m)</th></tr></thead><tbody>
+      ${quiltSets(j).map((s,i)=>`<tr><td>${i+1}</td><td>${s.fabric||'-'}</td><td class="num">${s.fabM||0}</td><td>${s.foam||'-'}</td><td class="num">${s.foamM||0}</td></tr>`).join('')}
+      <tr><td colspan="2"><b>Total</b></td><td class="num"><b>${fmt(quiltIssued(j),1)}</b></td><td></td><td class="num"><b>${fmt(quiltFoamTotal(j),1)}</b></td></tr>
     </tbody></table>
     <h4>RECEIPTS (LOTS)</h4>
     <table><thead><tr><th>Lot</th><th>Date</th><th class="num">Received (m)</th><th>Notes</th></tr></thead><tbody>
@@ -1667,30 +2017,41 @@ function pdfWorkOrder(o){
   let y=metaGrid(doc,[['Brand',o.brand],['Model',o.model],['Date',o.date],['Customer',o.cust]],90);
   y=metaGrid(doc,[['City',o.city],['Agent',o.agent],['Delivery',o.delivery||'-'],['Qty',o.Q]],y+6);
   y=metaGrid(doc,[['Length',o.L+'"'],['Breadth',o.W+'"'],['Height',o.H+'"'],['',' ']],y+6);
-  doc.autoTable({startY:y+6,head:[['Product','Recommended','Actual','Contingent','Metric']],
-    body:(o.lines||[]).map(l=>[l.name,fmt(l.recommended,3),l.entered?fmt(l.actual,3):'—',
-      l.contingent==null?'—':(l.contingent>0?'+':'')+fmt(l.contingent,3),l.unit]),...tableStyle});
+  doc.autoTable({startY:y+6,head:[['Product','Sizes / details entered','Recommended','Actual','Contingent','Metric']],
+    body:(o.lines||[]).map(l=>[l.name,lineDetailText(l),fmt(l.recommended,3),l.entered?fmt(l.actual,3):'—',
+      l.contingent==null?'—':(l.contingent>0?'+':'')+fmt(l.contingent,3),l.unit]),
+    ...tableStyle, columnStyles:{0:{halign:'left'},1:{halign:'left'}}});
+  if(o.subs&&o.subs.length){doc.setFontSize(9);doc.setTextColor(90);
+    doc.text('Substitutions: '+o.subs.map(s=>`${s.layer} -> ${s.used}`).join('; '),40,doc.lastAutoTable.finalY+18);doc.setTextColor(0);}
   return doc;
 }
 function pdfCut(c){
   const doc=jpdf(); if(!doc)return doc;
   const r=c.result;
   pdfHeader(doc,'CUTTING ORDER','CUT #',c.no);
-  let y=metaGrid(doc,[['Grade',cutGradeName(c)],['Block size',`${c.L}×${c.W}×${c.H}"`],['Blocks',c.qty],['Block CFT',fmt(blockCFT(c),2)]],90);
+  let y=metaGrid(doc,[['Grade',cutGradeName(c)],['Block size',`${c.L}×${c.W}×${c.H}"`],['Blocks',c.qty],['Block CFT',fmt(blockCFT(c),3)]],90);
   y=metaGrid(doc,[['Date',c.date],['Supplier',c.supplier||'-'],['Invoice #',c.invoiceNo||'-'],['Yield',r?fmt(r.blockCFT?100*r.sheetsCFT/r.blockCFT:0,1)+'%':'—']],y+6);
-  doc.autoTable({startY:y+6,head:[['Sheet thickness','Qty planned','Actual out','Wastage']],
+  y=metaGrid(doc,[['Block CFT',fmt(blockCFT(c),3)],['Sheets cut CFT',r?fmt(r.sheetsCFT,3):'____'],['Contingent CFT',r?fmt(r.contingent||0,3):'____'],['Wastage CFT',r?fmt(r.wastage||0,3):'____']],y+6);
+  if(r&&((r.otherCFT||0)||r.otherReason))y=metaGrid(doc,[['Other CFT',fmt(r.otherCFT||0,3)],['Other reason',r.otherReason||'-'],['',' '],['',' ']],y+6);
+  const extra=r?r.sheets.filter(s=>!c.planned.some(p=>p.thk===s.thk)):[];
+  doc.autoTable({startY:y+6,head:[['Sheet thickness','Qty planned','Actual out','Sheet CFT (actual)']],
     body:c.planned.map(p=>{const rr=r&&r.sheets.find(s=>s.thk===p.thk);
-      return [p.thk+'"',p.count,rr?rr.count:'____','____'];}),...tableStyle});
+      return [p.thk+'"',p.count,rr?rr.count:'____',rr?fmt((c.L*c.W*p.thk/1728)*rr.count,3):'____'];})
+      .concat(extra.map(s=>[s.thk+'" (extra)','—',s.count,fmt((c.L*c.W*s.thk/1728)*s.count,3)]))
+      .concat(r?[['Total sheets cut','','',fmt(r.sheetsCFT,3)+' CFT']]:[]),...tableStyle,columnStyles:{0:{halign:'left'}}});
   if(r){doc.setFontSize(9);doc.setTextColor(90);
-    doc.text(`Skin: ${r.skinThk}" (${fmt(r.skinCFT,3)} CFT)   Wastage: ${fmt(r.wastage,3)} CFT   Sheets out: ${fmt(r.sheetsCFT,3)} CFT`,40,doc.lastAutoTable.finalY+20);}
+    doc.text(`Block ${fmt(blockCFT(c),3)} CFT = Sheets ${fmt(r.sheetsCFT,3)} + Skin ${fmt(r.skinCFT,3)} (${r.skinThk}") + Contingent ${fmt(r.contingent||0,3)} + Wastage ${fmt(r.wastage,3)} + Other ${fmt(r.otherCFT||0,3)} CFT`,40,doc.lastAutoTable.finalY+20);doc.setTextColor(0);}
   return doc;
 }
 function pdfQuilt(j){
   const doc=jpdf(); if(!doc)return doc;
   pdfHeader(doc,'QUILTING ORDER','JOB #',j.no);
   let y=metaGrid(doc,[['Quilter',j.quilter],['Date',j.date],['Status',j.status==='received'?'Closed':'Open'],['Received',fmt(quiltRecv(j),1)+'/'+(j.fabM||0)+'m']],90);
-  doc.autoTable({startY:y+6,head:[['Item sent','Length (m)']],
-    body:[[j.fabric||'Fabric',j.fabM||0],[j.foam||'Quilting foam',j.foamM||0]],...tableStyle});
+  const qsets=quiltSets(j);
+  doc.autoTable({startY:y+6,head:[['Set','Fabric','Fabric (m)','Quilting foam','Foam (m)']],
+    body:qsets.map((s,i)=>[i+1,s.fabric||'-',s.fabM||0,s.foam||'-',s.foamM||0])
+      .concat([['','Total',fmt(quiltIssued(j),1),'',fmt(quiltFoamTotal(j),1)]]),
+    ...tableStyle,columnStyles:{0:{halign:'center'},1:{halign:'left'},3:{halign:'left'}}});
   doc.autoTable({startY:doc.lastAutoTable.finalY+14,head:[['Lot','Date','Received (m)','Notes']],
     body:(j.receipts||[]).length?j.receipts.map((r,i)=>[i+1,r.date||'',fmt(r.recvM,1),r.notes||''])
       .concat([['','Total',fmt(quiltRecv(j),1),'']]):[['—','____','____','']],...tableStyle});
@@ -1709,9 +2070,9 @@ function exportExcel(type){
     DB.orders.forEach(o=>(o.lines||[]).forEach((l,i)=>rows.push([i===0?o.num:'',i===0?o.date:'',i===0?o.brand:'',i===0?o.model:'',
       i===0?o.cust:'',i===0?o.city:'',i===0?o.agent:'',i===0?o.L:'',i===0?o.W:'',i===0?o.H:'',i===0?o.Q:'',
       l.name,fmt(l.recommended,3),l.entered?fmt(l.actual,3):'',l.contingent==null?'':fmt(l.contingent,3),l.unit])));
-  } else if(type==='cut'){rows.push(['Cut #','Date','Grade','Block L','Block W','Block H','Blocks','Supplier','Invoice #','Block CFT','Sheets out CFT','Skin CFT','Wastage CFT','Yield %','Edited','Status']);
+  } else if(type==='cut'){rows.push(['Cut #','Date','Grade','Block L','Block W','Block H','Blocks','Supplier','Invoice #','Block CFT','Sheets out CFT','Skin CFT','Contingent CFT','Wastage CFT','Other CFT','Other reason','Yield %','Edited','Status']);
     DB.cuts.forEach(c=>{const r=c.result;
-      rows.push([c.no,c.date,cutGradeName(c),c.L,c.W,c.H,c.qty,c.supplier||'',c.invoiceNo||'',fmt(blockCFT(c),3),r?fmt(r.sheetsCFT,3):'',r?fmt(r.skinCFT,3):'',r?fmt(r.wastage,3):'',
+      rows.push([c.no,c.date,cutGradeName(c),c.L,c.W,c.H,c.qty,c.supplier||'',c.invoiceNo||'',fmt(blockCFT(c),3),r?fmt(r.sheetsCFT,3):'',r?fmt(r.skinCFT,3):'',r?fmt(r.contingent||0,3):'',r?fmt(r.wastage,3):'',r?fmt(r.otherCFT||0,3):'',r?(r.otherReason||''):'',
         r&&r.blockCFT?fmt(100*r.sheetsCFT/r.blockCFT,1):'',c.edited?'YES':'',c.status]);});
   } else {rows.push(['Job #','Date','Quilter','Fabric','Fabric m','Quilting foam','Foam m','Received m','Lots','Status']);
     DB.quiltJobs.forEach(j=>rows.push([j.no,j.date,j.quilter,j.fabric,j.fabM,j.foam,j.foamM,fmt(quiltRecv(j),1),(j.receipts||[]).length,j.status]));}
