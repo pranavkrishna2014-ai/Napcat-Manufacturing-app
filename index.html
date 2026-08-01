@@ -291,6 +291,13 @@
         <div class="row"><b>Material Master</b><div class="spacer noprint"></div>
           <button class="btn noprint" onclick="editMaterial(null)">+ New Material</button></div>
         <p class="lead">Standard units are enforced by category: Fabric = Metre, Foam &amp; Latex = CFT, Spring &amp; Coir = PCS. Foam/latex carry sheet sizes &amp; contingent.</p>
+        <div class="card"><div class="row">
+          <label class="tag">Material</label><input id="matFName" placeholder="search name…" style="max-width:200px" oninput="renderMaterials()">
+          <label class="tag">Category</label>
+          <select id="matFCat" style="max-width:170px" onchange="renderMaterials()"><option value="">All categories</option></select>
+          <button class="btn ghost sm" onclick="clearMatFilter()">Clear</button>
+          <div class="spacer"></div><span class="tag" id="matCount"></span>
+        </div></div>
         <div class="card" style="padding:0;overflow:auto">
           <table id="matTable"><thead><tr>
             <th>Material</th><th>Category</th><th>Unit</th><th class="num">Current</th><th class="num">Min</th><th class="num">Max</th>
@@ -314,9 +321,9 @@
             <button class="btn" onclick="exportData()">⬇ Export backup (.json)</button>
             <label class="btn ghost" style="cursor:pointer">⬆ Import backup<input type="file" accept="application/json" style="display:none" onchange="importData(this)"></label>
             <div class="spacer"></div>
-            <button class="btn danger ghost" onclick="resetData()">Reset to sample data</button>
+            <button class="btn danger ghost" onclick="resetData()">🗑 Clear ALL data &amp; restart numbering</button>
           </div>
-          <div class="hint">Import replaces all current data. Export first if unsure.</div>
+          <div class="hint">Import replaces all current data. Export first if unsure. <b>Clear ALL data</b> deletes every work order, cutting, quilting job, flag &amp; note, resets the catalog to the starter list, and restarts reference numbers at 050901 / 141001 / 200801.</div>
         </div></div>
       </div>
     </div>
@@ -402,6 +409,13 @@ const UNITS=["CFT","PCS","Metre","Litre","Kg"];
 // Standard unit per category (Foam/Latex=CFT, Fabric=Metre, Spring/Coir=PCS)
 const CAT_UNIT={Foam:"CFT",Latex:"CFT",Fabric:"Metre",Spring:"PCS",Coir:"PCS"};
 const CFT_CATS=["Foam","Latex"]; // categories that carry contingent
+// Reference-number prefixes. Each new order appends a running 2-digit (or more) counter.
+// e.g. Work order -> 050901, 050902 …  Quilting -> 200801 …  Block cutting -> 141001 …
+const WO_PREFIX="0509", QUILT_PREFIX="2008", CUT_PREFIX="1410";
+const pad2=n=>String(n).padStart(2,'0');
+const woRef=seq=>WO_PREFIX+pad2(seq);
+const cutRef=seq=>CUT_PREFIX+pad2(seq);
+const quiltRef=seq=>QUILT_PREFIX+pad2(seq);
 const RULES={
   foam:      {label:"Cubic feet — fixed thickness layer (L×W×thk÷1728)", unit:"CFT", needs:["thickness"]},
   foam_rem:  {label:"Cubic feet — remaining height layer (fills leftover)", unit:"CFT", needs:[]},
@@ -511,7 +525,7 @@ function sampleDB(){
       {n:"Antiskid Base Fabric",rule:"fab_bottom"},
     ]),
   ];
-  return {materials,products,orders:[],woSeq:889,flagLog:[],others:[],
+  return {materials,products,orders:[],woSeq:1,flagLog:[],others:[],
     blocks:[],cuts:[],quiltJobs:[],blockSeq:1,cutSeq:1,quiltSeq:1,adminPin:'1234',
     users:[{id:uid(),name:'Admin',username:'admin',pin:'1234',role:'admin'},
            {id:uid(),name:'Shiva',username:'shiva',pin:'1111',role:'operator'}],
@@ -519,7 +533,7 @@ function sampleDB(){
 }
 function ensureDB(d){
   d.orders=d.orders||[]; d.blocks=d.blocks||[]; d.cuts=d.cuts||[]; d.quiltJobs=d.quiltJobs||[];
-  d.woSeq=d.woSeq||889; d.blockSeq=d.blockSeq||1; d.cutSeq=d.cutSeq||1; d.quiltSeq=d.quiltSeq||1;
+  d.woSeq=d.woSeq||1; d.blockSeq=d.blockSeq||1; d.cutSeq=d.cutSeq||1; d.quiltSeq=d.quiltSeq||1;
   d.adminPin=d.adminPin||'1234';
   d.flagLog=d.flagLog||[];
   d.others=d.others||[];
@@ -779,16 +793,27 @@ function reconcileFlag(logId){
   save(); renderFlagLog();
 }
 function openFlagRec(type,id){ if(type==='wo')viewWO(id); else if(type==='cut')viewCut(id); else viewQuilt(id); }
+let flagLogFilter='all';
+function setFlagLogFilter(v){flagLogFilter=v;renderFlagLog();}
 function renderFlagLog(){
   const box=document.getElementById('flagLogBody'); if(!box)return;
-  const log=(DB.flagLog||[]).slice().reverse();
-  const open=log.filter(e=>!e.reconciled).length;
+  const all=(DB.flagLog||[]).slice().reverse();
+  const open=all.filter(e=>!e.reconciled).length;
+  const log=flagLogFilter==='all'?all:all.filter(e=>e.type===flagLogFilter);
+  const typeName=t=>t==='wo'?'Work Order':t==='cut'?'Cutting':'Quilting';
+  const opts=[['all','All types'],['wo','Work Order'],['cut','Cutting'],['quilt','Quilting']]
+    .map(([v,l])=>`<option value="${v}" ${v===flagLogFilter?'selected':''}>${l}${v!=='all'?' ('+all.filter(e=>e.type===v).length+')':''}</option>`).join('');
   box.innerHTML=`<p class="lead">Flags you dismissed from the dashboard land here. Reconcile them once addressed, or reopen to put them back on the dashboard.</p>
     <div class="grid g3">
-      <div class="kpi"><div class="v">${log.length}</div><div class="l">Logged flags</div></div>
+      <div class="kpi"><div class="v">${all.length}</div><div class="l">Logged flags</div></div>
       <div class="kpi"><div class="v" style="color:${open?'var(--warn)':'var(--txt)'}">${open}</div><div class="l">Awaiting reconciliation</div></div>
-      <div class="kpi"><div class="v">${log.length-open}</div><div class="l">Reconciled</div></div>
+      <div class="kpi"><div class="v">${all.length-open}</div><div class="l">Reconciled</div></div>
     </div>
+    <div class="card"><div class="row">
+      <label class="tag">Filter by type</label>
+      <select style="max-width:200px" onchange="setFlagLogFilter(this.value)">${opts}</select>
+      <span class="tag">Showing ${log.length} of ${all.length}</span>
+    </div></div>
     <div class="card" style="padding:0;overflow:auto">${log.length?`<table><thead><tr>
       <th>Type</th><th>Ref</th><th>Detail</th><th>Reason</th><th>Dismissed</th><th>Status</th><th class="noprint"></th></tr></thead><tbody>`+
       log.map(e=>`<tr>
@@ -801,7 +826,7 @@ function renderFlagLog(){
         <td class="num noprint">
           <button class="btn ghost sm" onclick='reconcileFlag(${JSON.stringify(e.id)})'>${e.reconciled?'Undo':'Reconcile'}</button>
           <button class="btn ghost sm" onclick='reopenFlag(${JSON.stringify(e.id)})'>Reopen</button></td></tr>`).join('')
-      +`</tbody></table>`:`<p class="muted small" style="padding:14px">No dismissed flags yet.</p>`}</div>`;
+      +`</tbody></table>`:`<p class="muted small" style="padding:14px">${all.length?'No '+typeName(flagLogFilter)+' flags in the log.':'No dismissed flags yet.'}</p>`}</div>`;
 }
 
 /* ============================ REVIEW ============================ */
@@ -1023,7 +1048,7 @@ function initCreateWO(){
   fillDL('dlCity',uniq(DB.orders.map(o=>o.city)));
   fillDL('dlAgent',uniq(DB.orders.map(o=>o.agent)));
   document.getElementById('woDateChip').textContent='📅 '+today();
-  if(!editingWO){document.getElementById('woNumChip').textContent='WO #: '+DB.woSeq+' (auto)';}
+  if(!editingWO){document.getElementById('woNumChip').textContent='WO #: '+woRef(DB.woSeq)+' (auto)';}
 }
 function fillDL(id,vals){document.getElementById(id).innerHTML=vals.map(v=>`<option value="${v}">`).join('');}
 function onBrandChange(){
@@ -1262,7 +1287,7 @@ function saveWO(){
     save();alert("Work order "+ex.num+" updated.");editingWO=null;
   } else {
     if(DB.orders.length>=2000){alert("Storage limit of 2000 work orders reached. Export & archive older ones.");return;}
-    o.id=uid();o.num=DB.woSeq;o.date=today();DB.orders.push(o);DB.woSeq++;
+    o.id=uid();o.num=woRef(DB.woSeq);o.date=today();DB.orders.push(o);DB.woSeq++;
     save();alert("Work order "+o.num+" saved.");
   }
   resetWOForm();
@@ -1378,7 +1403,7 @@ function downloadOnePDF(type){
     if(!curProd){alert("Select a brand and model first.");return;}
     const {res,o}=formToOrder();
     if(res.errors.length){alert("Fix errors first:\n\n"+res.errors.join("\n"));return;}
-    o.num=editingWO?DB.orders.find(x=>x.id===editingWO).num:DB.woSeq; o.date=editingWO?(DB.orders.find(x=>x.id===editingWO).date):today();
+    o.num=editingWO?DB.orders.find(x=>x.id===editingWO).num:woRef(DB.woSeq); o.date=editingWO?(DB.orders.find(x=>x.id===editingWO).date):today();
     pdfWorkOrder(o).save(`WorkOrder-${o.num}.pdf`);
   }
 }
@@ -1470,9 +1495,23 @@ function commitProduct(id){
 }
 
 /* ============================ MATERIAL MASTER ============================ */
+function clearMatFilter(){const n=document.getElementById('matFName'),c=document.getElementById('matFCat');
+  if(n)n.value='';if(c)c.value='';renderMaterials();}
 function renderMaterials(){
   const tb=document.querySelector('#matTable tbody');
-  tb.innerHTML=DB.materials.map(m=>{
+  // keep the category dropdown populated with the current categories
+  const catSel=document.getElementById('matFCat');
+  if(catSel){const cur=catSel.value;
+    catSel.innerHTML='<option value="">All categories</option>'+CATS.map(c=>`<option value="${c}">${c}</option>`).join('');
+    catSel.value=cur;}
+  const fName=(document.getElementById('matFName')?.value||'').trim().toLowerCase();
+  const fCat=document.getElementById('matFCat')?.value||'';
+  const list=DB.materials.filter(m=>
+    (!fName||(m.name||'').toLowerCase().includes(fName)) &&
+    (!fCat||m.cat===fCat));
+  const cnt=document.getElementById('matCount');
+  if(cnt)cnt.textContent=list.length+' of '+DB.materials.length+' materials';
+  tb.innerHTML=list.length?list.map(m=>{
     let st='ok',lbl='OK';
     if(Number(m.cur)<=Number(m.min)){st='crit';lbl='REORDER';}
     else if(Number(m.cur)<=Number(m.min)*1.25){st='low';lbl='LOW';}
@@ -1481,7 +1520,7 @@ function renderMaterials(){
       <td class="num">${(m.sheets||[]).length||'—'}</td><td>${m.sup||'-'}</td>
       <td><span class="pill ${st}">${lbl}</span></td>
       <td class="num noprint"><button class="btn ghost sm" onclick='editMaterial(${JSON.stringify(m.id)})'>Edit</button></td></tr>`;
-  }).join('');
+  }).join(''):'<tr><td colspan="10" class="muted small" style="padding:14px">No materials match your filter.</td></tr>';
 }
 let editSheets=[];
 function editMaterial(id){
@@ -1553,8 +1592,8 @@ function importData(inp){const f=inp.files[0];if(!f)return;const rd=new FileRead
   rd.onload=e=>{try{const d=JSON.parse(e.target.result);
     if(!d.materials||!d.products)throw 0;DB=d;save();alert("Backup imported.");go('dash');}
     catch(err){alert("That file is not a valid backup.");}};rd.readAsText(f);}
-function resetData(){if(confirm("Reset everything to the built-in sample data? Current data will be lost.")){
-  DB=sampleDB();save();go('dash');}}
+function resetData(){if(confirm("Clear ALL data?\n\nThis permanently deletes every work order, cutting order, quilting job, flag log entry and note (on all devices), resets the material/product catalog to the starter list, and restarts reference numbers at 050901 / 141001 / 200801.\n\nThis cannot be undone. Continue?")){
+  DB=sampleDB();save();go('dash');alert("All data cleared. Numbering restarts at 050901 (work orders), 141001 (block cutting), 200801 (quilting).");}}
 
 /* ============================ MODAL ============================ */
 function openModal(html){document.getElementById('modalBody').innerHTML=html;document.getElementById('modal').style.display='flex';}
@@ -1627,7 +1666,7 @@ function renderCutting(){
 
 let CUTPLAN=[];
 function editCut(id){
-  const c=id?DB.cuts.find(x=>x.id===id):{no:'CUT-'+DB.cutSeq,date:today(),mat:(foamMats()[0]||{}).id,L:'',W:'',H:'',qty:1,supplier:'',invoiceNo:'',planned:[{thk:1,count:1}]};
+  const c=id?DB.cuts.find(x=>x.id===id):{no:cutRef(DB.cutSeq),date:today(),mat:(foamMats()[0]||{}).id,L:'',W:'',H:'',qty:1,supplier:'',invoiceNo:'',planned:[{thk:1,count:1}]};
   CUTPLAN=JSON.parse(JSON.stringify(c.planned||[{thk:1,count:1}]));
   const opts=foamMats().map(m=>`<option value="${m.id}" ${m.id===c.mat?'selected':''}>${m.name}</option>`).join('');
   openModal(`<div class="row"><b style="font-size:16px">${id?'Edit':'New'} Cutting Order</b><div class="spacer"></div>
@@ -1673,7 +1712,7 @@ function commitCut(id){
   if(!(o.L>0&&o.W>0&&o.H>0)){alert("Enter valid block dimensions.");return;}
   if(!o.planned.length){alert("Add at least one thickness with quantity.");return;}
   if(id){const c=DB.cuts.find(x=>x.id===id);Object.assign(c,o);logEdit(c);}
-  else{o.id=uid();o.no='CUT-'+DB.cutSeq;o.status='issued';o.result=null;DB.cuts.push(o);DB.cutSeq++;}
+  else{o.id=uid();o.no=cutRef(DB.cutSeq);o.status='issued';o.result=null;DB.cuts.push(o);DB.cutSeq++;}
   save();closeModal();renderCutTab();
 }
 let CUTRES=[], currentCutId=null;
@@ -1882,7 +1921,7 @@ function renderQuilting(){
 }
 let QSETS=[];
 function editQuilt(id){
-  const j=id?DB.quiltJobs.find(x=>x.id===id):{no:'QJ-'+DB.quiltSeq,date:new Date().toISOString().slice(0,10)};
+  const j=id?DB.quiltJobs.find(x=>x.id===id):{no:quiltRef(DB.quiltSeq),date:new Date().toISOString().slice(0,10)};
   QSETS=id?JSON.parse(JSON.stringify(quiltSets(j))):[{fabric:'',fabM:'',foam:'',foamM:''}];
   openModal(`<div class="row"><b style="font-size:16px">${id?'Edit':'New'} Quilting Job</b><div class="spacer"></div>
       <button class="btn ghost sm" onclick="closeModal()">Cancel</button></div>
