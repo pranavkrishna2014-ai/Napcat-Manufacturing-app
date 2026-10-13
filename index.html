@@ -273,16 +273,18 @@
       <div class="card">
         <div class="row">
           <b>Invoices against work orders</b><span class="tag" id="docCount-invoice"></span><div class="spacer"></div>
+          <button class="btn sm" id="docAll-invoice" onclick="checkAllDocs('invoice')" style="display:none"></button>
           <button class="btn g sm" id="docUp-invoice" onclick="uploadDocModal('invoice')">＋ Upload Invoice PDF</button>
         </div>
         <div class="hint">Bills raised in Tally for each work order. Upload the PDF and Claude compares it with the work order — customer, model, size and quantity.</div>
         <div class="row" style="margin-top:10px">
           <input id="docF-invoice" placeholder="search WO #, customer, model or number" style="max-width:300px" oninput="renderDocTab('invoice')">
-          <select id="docS-invoice" style="max-width:190px" onchange="renderDocTab('invoice')">
+          <select id="docS-invoice" style="max-width:210px" onchange="renderDocTab('invoice')">
             <option value="">All</option><option value="pending">Not checked yet</option>
-            <option value="issue">Differences / unclear</option><option value="match">Matches</option></select>
+            <option value="issue">Differences / unclear (to review)</option><option value="match">OK (matches + accepted)</option><option value="accepted">Accepted by admin</option></select>
           <button class="btn ghost sm" onclick="document.getElementById('docF-invoice').value='';document.getElementById('docS-invoice').value='';renderDocTab('invoice')">Clear</button>
         </div>
+        <div class="banner info" id="docBulk-invoice" style="display:none;margin-top:10px"></div>
         <div class="banner err" id="docSetup-invoice" style="display:none">Online document storage is not set up yet. Run the SQL from the setup guide in Supabase once, then reload.</div>
       </div>
       <div class="card" style="padding:0;overflow:auto"><div id="docBody-invoice"></div></div>
@@ -292,16 +294,18 @@
       <div class="card">
         <div class="row">
           <b>Tally work orders</b><span class="tag" id="docCount-tally"></span><div class="spacer"></div>
+          <button class="btn sm" id="docAll-tally" onclick="checkAllDocs('tally')" style="display:none"></button>
           <button class="btn g sm" id="docUp-tally" onclick="uploadDocModal('tally')">＋ Upload Tally WO PDF</button>
         </div>
         <div class="hint">Work orders entered in Tally. Upload the PDF and Claude compares every line with the work order issued in this app.</div>
         <div class="row" style="margin-top:10px">
           <input id="docF-tally" placeholder="search WO #, customer, model or number" style="max-width:300px" oninput="renderDocTab('tally')">
-          <select id="docS-tally" style="max-width:190px" onchange="renderDocTab('tally')">
+          <select id="docS-tally" style="max-width:210px" onchange="renderDocTab('tally')">
             <option value="">All</option><option value="pending">Not checked yet</option>
-            <option value="issue">Differences / unclear</option><option value="match">Matches</option></select>
+            <option value="issue">Differences / unclear (to review)</option><option value="match">OK (matches + accepted)</option><option value="accepted">Accepted by admin</option></select>
           <button class="btn ghost sm" onclick="document.getElementById('docF-tally').value='';document.getElementById('docS-tally').value='';renderDocTab('tally')">Clear</button>
         </div>
+        <div class="banner info" id="docBulk-tally" style="display:none;margin-top:10px"></div>
         <div class="banner err" id="docSetup-tally" style="display:none">Online document storage is not set up yet. Run the SQL from the setup guide in Supabase once, then reload.</div>
       </div>
       <div class="card" style="padding:0;overflow:auto"><div id="docBody-tally"></div></div>
@@ -2861,17 +2865,21 @@ async function pushDoc(d){
 }
 
 /* ---- status summary used in the work-order list ---- */
+// A difference the admin has reviewed and accepted. Tied to that exact check, so a re-check needs a fresh review.
+function isAccepted(d){return !!(d&&d.check&&d.check.verdict!=='match'&&d.resolved&&d.resolved.checkAt===d.check.at);}
+function isIssue(d){return !!(d&&d.check&&d.check.verdict!=='match'&&!isAccepted(d));}
+function canResolve(){return isAdmin();}
 function docStatus(woId,kind){
   const ds=docsFor(woId,kind);
   if(!ds.length)return {cls:'none',txt:'—',tip:'Nothing uploaded'};
-  const bad=ds.filter(d=>d.check&&d.check.verdict==='mismatch').length;
-  const unclear=ds.filter(d=>d.check&&d.check.verdict==='unclear').length;
-  const pending=ds.filter(d=>!d.check).length;
+  const bad=ds.filter(d=>isIssue(d)&&d.check.verdict==='mismatch').length;
+  const unclear=ds.filter(d=>isIssue(d)&&d.check.verdict==='unclear').length;
+  const pending=ds.filter(d=>!d.check).length, acc=ds.filter(isAccepted).length;
   const n=ds.length;
   if(bad)return {cls:'crit',txt:`⚠ ${bad} of ${n}`,tip:bad+' with differences'};
   if(unclear)return {cls:'low',txt:`? ${n}`,tip:'Claude could not decide on '+unclear};
   if(pending)return {cls:'pend',txt:`${n} · not checked`,tip:pending+' not checked by Claude yet'};
-  return {cls:'ok',txt:`✓ ${n}`,tip:'All checked — match'};
+  return {cls:'ok',txt:`✓ ${n}`,tip:acc?`All OK — ${acc} with differences accepted`:'All checked — match'};
 }
 function docStatusCell(o,kind){
   const s=docStatus(o.id,kind);
@@ -2883,6 +2891,7 @@ function verdictPill(d){
   if(!d.check)return `<span class="pill pend">Not checked</span>`;
   const v=d.check.verdict;
   if(v==='match')return `<span class="pill ok">✓ Matches</span>`;
+  if(isAccepted(d))return `<span class="pill ok" style="background:#e6f0ff;color:#1a5fbf" title="Accepted by ${escH(d.resolved.by)}${d.resolved.note?': '+escH(d.resolved.note):''}">✓ Accepted</span>`;
   if(v==='mismatch')return `<span class="pill crit">⚠ Differences</span>`;
   return `<span class="pill low">? Unclear</span>`;
 }
@@ -2897,6 +2906,10 @@ function renderDocTab(kind){
   const box=document.getElementById('docBody-'+kind);
   if(!box)return;
   const upBtn=document.getElementById('docUp-'+kind); if(upBtn)upBtn.style.display=canDocs()?'':'none';
+  const allBtn=document.getElementById('docAll-'+kind);
+  if(allBtn){const n=(DB.woDocs||[]).filter(d=>d.kind===kind&&!d.check).length;
+    allBtn.style.display=(canDocs()&&DOCS_OK&&(n||BULK[kind]))?'':'none';
+    allBtn.disabled=!!BULK[kind]; allBtn.textContent=BULK[kind]?'🤖 Checking…':`🤖 Check all unchecked (${n})`;}
   const setup=document.getElementById('docSetup-'+kind);
   if(setup)setup.style.display=DOCS_OK?'none':'block';
   const q=(document.getElementById('docF-'+kind).value||'').trim().toLowerCase();
@@ -2907,8 +2920,9 @@ function renderDocTab(kind){
     const hay=[d.woNum,o.cust,o.model,d.docNo].join(' ').toLowerCase();
     if(q&&!hay.includes(q))return false;
     if(st==='pending'&&d.check)return false;
-    if(st==='match'&&!(d.check&&d.check.verdict==='match'))return false;
-    if(st==='issue'&&!(d.check&&d.check.verdict!=='match'))return false;
+    if(st==='match'&&!(d.check&&(d.check.verdict==='match'||isAccepted(d))))return false;
+    if(st==='issue'&&!isIssue(d))return false;
+    if(st==='accepted'&&!isAccepted(d))return false;
     return true;
   });
   document.getElementById('docCount-'+kind).textContent=list.length+' of '+(DB.woDocs||[]).filter(d=>d.kind===kind).length;
@@ -2929,6 +2943,7 @@ function renderDocTab(kind){
           <button class="btn ghost sm" title="Open PDF" onclick='openDocFile(${JSON.stringify(d.id)})'>📄 PDF</button>
           ${canRun?`<button class="btn sm" title="Ask Claude to compare this PDF with the work order" ${DOC_BUSY[d.id]?'disabled':''} onclick='runCheck(${JSON.stringify(d.id)})'>🤖 ${d.check?'Re-check':'Check'}</button>`:''}
           ${d.check?`<button class="btn ghost sm" onclick='showCheck(${JSON.stringify(d.id)})'>Result</button>`:''}
+          ${isIssue(d)&&canResolve()?`<button class="btn ghost sm" style="color:var(--accent2)" title="Differences are not important — mark as OK" onclick='acceptModal(${JSON.stringify(d.id)})'>✓ Accept</button>`:''}
           ${canRun?`<button class="btn danger ghost sm" title="Delete" onclick='delDoc(${JSON.stringify(d.id)})'>✕</button>`:''}
         </td></tr>`;}).join('')+`</tbody></table>`
     :`<p class="muted small" style="padding:14px">${DOCS_OK?'No '+K.plural.toLowerCase()+' uploaded yet.':'Online document storage is not set up yet.'}</p>`;
@@ -2999,8 +3014,9 @@ async function delDoc(id){
 }
 
 /* ---- Claude check (runs in the Supabase Edge Function `check-doc`) ---- */
-async function runCheck(id){
-  const d=(DB.woDocs||[]).find(x=>x.id===id); if(!d||DOC_BUSY[id])return;
+async function runCheck(id,opts){
+  const quiet=!!(opts&&opts.quiet); let failMsg=null;
+  const d=(DB.woDocs||[]).find(x=>x.id===id); if(!d||DOC_BUSY[id])return 'busy';
   DOC_BUSY[id]=true; renderDocTab(d.kind);
   try{
     const r=await sb.functions.invoke('check-doc',{body:{docId:id,by:CURRENT_USER?CURRENT_USER.name:''}});
@@ -3012,11 +3028,69 @@ async function runCheck(id){
     if(!r.data||r.data.error)throw new Error((r.data&&r.data.error)||'Empty reply');
     const cur=(DB.woDocs||[]).find(x=>x.id===id)||d; cur.check=r.data; d.check=r.data;
   }catch(e){
-    console.error(e);
-    alert('Claude check could not run:\n\n'+(e.message||e)+
+    console.error(e); failMsg=String(e.message||e);
+    if(!quiet)alert('Claude check could not run:\n\n'+(e.message||e)+
       '\n\nIf this is the first time, make sure the check-doc function and the ANTHROPIC_API_KEY secret are set up in Supabase.');
   }finally{ delete DOC_BUSY[id]; renderDocTab(d.kind); if(CURRENT_VIEW==='wo'&&WO_SUB==='all')renderWOAll(); }
+  if(quiet)return failMsg;
   if(d.check&&document.getElementById('modal').style.display!=='flex')showCheck(id);
+  return failMsg;
+}
+
+/* ---- Check all unchecked PDFs in one go (2 at a time) ---- */
+let BULK={};
+async function checkAllDocs(kind){
+  if(BULK[kind])return;
+  const todo=(DB.woDocs||[]).filter(d=>d.kind===kind&&!d.check).map(d=>d.id);
+  if(!todo.length)return;
+  if(!confirm(`Ask Claude to check ${todo.length} unchecked ${DOC_KINDS[kind].plural.toLowerCase()}?\nRoughly ₹2–4 each with Sonnet (less with Haiku). You can keep working meanwhile.`))return;
+  const job=BULK[kind]={total:todo.length,done:0,ok:0,diff:0,unclear:0,fail:[],stop:false};
+  const banner=document.getElementById('docBulk-'+kind);
+  const show=()=>{banner.style.display='block';banner.className='banner info';
+    banner.innerHTML=job.done<job.total&&!job.stop
+      ?`🤖 Checking ${job.done+1>job.total?job.total:job.done+1} of ${job.total}… ✓ ${job.ok} match · ⚠ ${job.diff} differences · ? ${job.unclear} unclear${job.fail.length?` · ✗ ${job.fail.length} failed`:''}
+        <button class="btn ghost sm" style="margin-left:10px" onclick="BULK['${kind}'].stop=true">Stop</button>`
+      :`<b>${job.stop?'Stopped':'Done'}:</b> ${job.done} checked — ✓ ${job.ok} match · ⚠ ${job.diff} differences · ? ${job.unclear} unclear${job.fail.length?` · ✗ ${job.fail.length} failed (${escH(job.fail[0])})`:''}.
+        ${job.diff+job.unclear?' Showing the ones to review below.':''} <button class="btn ghost sm" style="margin-left:10px" onclick="this.parentNode.style.display='none'">Hide</button>`;};
+  show(); renderDocTab(kind);
+  const worker=async()=>{while(todo.length&&!job.stop){const id=todo.shift();
+    const err=await runCheck(id,{quiet:true}); const d=(DB.woDocs||[]).find(x=>x.id===id);
+    job.done++; if(err)job.fail.push(err); else if(d&&d.check){const v=d.check.verdict; if(v==='match')job.ok++; else if(v==='mismatch')job.diff++; else job.unclear++;}
+    show();}};
+  await Promise.all([worker(),worker()]);
+  delete BULK[kind]; show();
+  if(job.diff+job.unclear){const s=document.getElementById('docS-'+kind); s.value='issue';}
+  renderDocTab(kind); if(CURRENT_VIEW==='wo'&&WO_SUB==='all')renderWOAll();
+}
+
+/* ---- Accept differences that don't matter ---- */
+function acceptModal(id){
+  const d=(DB.woDocs||[]).find(x=>x.id===id); if(!d||!isIssue(d)||!canResolve())return;
+  const diffs=(d.check.checks||[]).filter(x=>x.status==='mismatch'||x.status==='missing');
+  openModal(`<div class="row"><b style="font-size:16px">Accept differences — ${DOC_KINDS[d.kind].label} ${escH(d.docNo)} vs ${escH(d.woNum)}</b><div class="spacer"></div>
+      <button class="btn ghost sm" onclick="closeModal()">Cancel</button></div>
+    <p class="small" style="margin-top:10px">${escH(d.check.summary||'')}</p>
+    ${diffs.length?`<ul class="small" style="margin:8px 0 0 18px">${diffs.map(x=>`<li><b>${escH(x.item)}</b>: work order ${escH(x.work_order)} → PDF ${escH(x.document)}${x.note?' <span class="muted">('+escH(x.note)+')</span>':''}</li>`).join('')}</ul>`:''}
+    <div style="margin-top:12px"><label class="f">Why is this OK? (saved with your name)</label>
+      <input id="accNote" placeholder="e.g. rounding difference, customer name abbreviation, agreed change by phone"></div>
+    <div class="hint">The entry turns green as "Accepted". If anyone re-checks it later, Claude's new result will need a fresh review.</div>
+    <div class="divider"></div>
+    <div class="row"><div class="spacer"></div><button class="btn g" onclick='commitAccept(${JSON.stringify(id)})'>✓ Accept — mark as OK</button></div>`);
+  setTimeout(()=>{const n=document.getElementById('accNote');if(n)n.focus();},50);
+}
+async function commitAccept(id){
+  const d=(DB.woDocs||[]).find(x=>x.id===id); if(!d)return;
+  const prev=d.resolved;
+  d.resolved={by:CURRENT_USER.name,at:new Date().toISOString(),note:(document.getElementById('accNote').value||'').trim(),checkAt:d.check.at};
+  try{await pushDoc(d);}catch(e){d.resolved=prev;alert('Could not save: '+(e.message||e));return;}
+  closeModal(); renderDocTab(d.kind); if(CURRENT_VIEW==='wo'&&WO_SUB==='all')renderWOAll();
+}
+async function reopenDoc(id){
+  const d=(DB.woDocs||[]).find(x=>x.id===id); if(!d||!isAccepted(d))return;
+  if(!confirm('Undo the acceptance? It will show as Differences again.'))return;
+  const prev=d.resolved; delete d.resolved;
+  try{await pushDoc(d);}catch(e){d.resolved=prev;alert('Could not save: '+(e.message||e));return;}
+  showCheck(id); renderDocTab(d.kind); if(CURRENT_VIEW==='wo'&&WO_SUB==='all')renderWOAll();
 }
 function showCheck(id){
   const d=(DB.woDocs||[]).find(x=>x.id===id); if(!d||!d.check)return;
@@ -3034,6 +3108,9 @@ function showCheck(id){
       ${(c.checks||[]).map(x=>`<tr><td><b>${escH(x.item)}</b></td><td>${escH(x.work_order)}</td><td>${escH(x.document)}</td>
         <td><span class="pill ${rowCls[x.status]||'pend'}">${rowTxt[x.status]||escH(x.status)}</span></td><td class="small wrap">${escH(x.note||'')}</td></tr>`).join('')}
     </tbody></table></div>
+    ${isAccepted(d)?`<div class="banner info" style="display:block;margin-top:10px">✓ <b>Accepted</b> by ${escH(d.resolved.by)} on ${escH((d.resolved.at||'').slice(0,10))}${d.resolved.note?' — '+escH(d.resolved.note):''}
+        ${canResolve()?`<button class="btn ghost sm" style="margin-left:10px" onclick='reopenDoc(${JSON.stringify(d.id)})'>Undo</button>`:''}</div>`
+      :isIssue(d)&&canResolve()?`<div class="row" style="margin-top:10px"><span class="small muted">Not important?</span><button class="btn g sm" onclick='acceptModal(${JSON.stringify(d.id)})'>✓ Accept differences</button></div>`:''}
     <div class="hint" style="margin-top:10px">Checked by Claude (${escH(c.model||'')}) on ${escH((c.at||'').replace('T',' ').slice(0,16))}${c.by?' · run by '+escH(c.by):''}. AI can make mistakes — open the PDF to confirm before acting.</div>`);
 }
 
