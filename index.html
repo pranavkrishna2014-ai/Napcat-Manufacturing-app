@@ -1456,7 +1456,7 @@ function saveWO(){
     save();alert("Work order "+ex.num+" updated.");editingWO=null;
   } else {
     if(DB.orders.length>=2000){alert("Storage limit of 2000 work orders reached. Export & archive older ones.");return;}
-    o.id=uid();o.num=woRef(DB.woSeq);o.date=today();DB.orders.push(o);DB.woSeq++;
+    o.id=uid();o.num=woRef(DB.woSeq);o.date=today();o.createdAt=new Date().toISOString();o.createdBy=CURRENT_USER?CURRENT_USER.name:'';DB.orders.push(o);DB.woSeq++;
     save();alert("Work order "+o.num+" saved.");
   }
   resetWOForm();
@@ -1507,8 +1507,40 @@ function editWO(id){
   document.getElementById('woDateChip').textContent='📅 '+(o.date||'');
   renderCalc();
 }
-function delWO(id){const o=DB.orders.find(x=>x.id===id);
-  if(confirm("Delete work order "+o.num+"?")){DB.orders=DB.orders.filter(x=>x.id!==id);save();renderWOAll();}}
+/* ---- Delete within 48 hours (admins can still delete later, with a typed confirmation) ---- */
+const DEL_HOURS=48;
+function recAgeH(r){const t=r.createdAt?Date.parse(r.createdAt):Date.parse((r.date||'1970-01-01')+'T00:00:00+05:30');return (Date.now()-t)/36e5;}
+function delLeftH(r){return DEL_HOURS-recAgeH(r);}
+function delBtn(type,r){
+  const left=delLeftH(r), fn={wo:'delWO',cut:'delCut',quilt:'delQuilt'}[type];
+  if(left>0)return `<button class="btn danger ghost sm" title="Delete completely — ${left>=1?Math.floor(left)+' h':Math.max(1,Math.round(left*60))+' min'} left" onclick='${fn}(${JSON.stringify(r.id)})'>✕</button>`;
+  if(isAdmin())return `<button class="btn ghost sm" title="Older than 48 hours — admin delete" onclick='${fn}(${JSON.stringify(r.id)})'>🔒✕</button>`;
+  return `<span class="tag" title="Entries can only be deleted within 48 hours of creation">🔒</span>`;
+}
+function delAllowed(r,label){
+  if(delLeftH(r)>0)return true;
+  if(!isAdmin()){alert('This entry is older than 48 hours and can no longer be deleted. Ask an admin.');return false;}
+  const t=prompt(`${label} is older than 48 hours.\nType its number to delete it anyway:`);
+  if(t==null)return false; if(String(t).trim()!==String(label.split(' ').pop())){alert('Number did not match — nothing deleted.');return false;}
+  return true;
+}
+async function delWO(id){const o=DB.orders.find(x=>x.id===id); if(!o)return;
+  const ss=(DB.serials||[]).filter(s=>s.woId===id);
+  if(ss.some(s=>s.status==='dispatched')){alert(`${o.num} has mattresses already dispatched, so it can't be deleted.`);return;}
+  const mv=(DB.moves||[]).filter(v=>v.woId===id&&(v.type==='issue'||v.type==='return'));
+  const docs=(DB.woDocs||[]).filter(d=>d.woId===id);
+  const net={}; mv.forEach(v=>{net[v.matId]=(net[v.matId]||0)+v.qty;});
+  const back=Object.entries(net).filter(([,q])=>Math.abs(q)>0.0005);
+  const parts=[back.length?`• ${back.length} issued material(s) go back to stock`:'',ss.length?`• ${ss.length} serial number(s) removed`:'',docs.length?`• ${docs.length} invoice / Tally WO PDF(s) deleted`:''].filter(Boolean);
+  if(!delAllowed(o,'Work order '+o.num))return;
+  if(!confirm(`Delete work order ${o.num} completely?${parts.length?'\n\n'+parts.join('\n'):''}\n\nThis cannot be undone.`))return;
+  back.forEach(([mid,q])=>{const m=matById(mid); if(!m)return; if(ERP_OK)postMove(m,'return',-q,{woId:o.id,woNum:o.num,note:`${o.num} deleted — material returned`}); else m.cur=+(Number(m.cur||0)-q).toFixed(3);});
+  if(ss.length)DB.serials=DB.serials.filter(s=>s.woId!==id);
+  DB.orders=DB.orders.filter(x=>x.id!==id); save();
+  for(const d of docs){try{await sb.from('wo_docs').delete().eq('id',d.id); await sb.storage.from(DOC_BUCKET).remove([d.path]);}catch(e){console.error(e);}}
+  if(docs.length)DB.woDocs=DB.woDocs.filter(d=>d.woId!==id);
+  renderWO();
+}
 function inRange(d,from,to){if(from&&d<from)return false;if(to&&d>to)return false;return true;}
 function clearWOFilter(){['woFrom','woTo','woFCust','woFModel'].forEach(id=>{const e=document.getElementById(id);if(e)e.value='';});renderWOAll();}
 function renderWOAll(){
@@ -1535,7 +1567,7 @@ function renderWOAll(){
         <button class="btn ghost sm" onclick='viewWO(${JSON.stringify(o.id)})'>View</button>
         <button class="btn ghost sm" onclick='docPDF("wo",${JSON.stringify(o.id)})'>PDF</button>
         <button class="btn ghost sm" onclick='editWO(${JSON.stringify(o.id)})'>Edit</button>
-        <button class="btn danger ghost sm" title="Delete" onclick='delWO(${JSON.stringify(o.id)})'>✕</button></td></tr>`).join('')
+        ${delBtn('wo',o)}</td></tr>`).join('')
     +`</tbody></table>`:`<p class="muted small" style="padding:14px">No work orders in this range.</p>`;
 }
 function woSheetHTML(o){
@@ -1803,11 +1835,15 @@ function renderCutAll(){
         <button class="btn ghost sm" onclick='docPDF("cut",${JSON.stringify(c.id)})'>PDF</button>
         <button class="btn ghost sm" onclick='editCut(${JSON.stringify(c.id)})'>Edit</button>
         ${c.status!=='completed'?`<button class="btn g sm" onclick='completeCut(${JSON.stringify(c.id)})'>Result</button>`:''}
-        <button class="btn danger ghost sm" onclick='delCut(${JSON.stringify(c.id)})'>✕</button></td></tr>`;}).join('')
+        ${delBtn('cut',c)}</td></tr>`;}).join('')
     +`</tbody></table>`:`<p class="muted small" style="padding:14px">No cutting orders in this range.</p>`;
 }
-function delCut(id){const c=DB.cuts.find(x=>x.id===id);
-  if(confirm("Delete cutting order "+c.no+"?")){DB.cuts=DB.cuts.filter(x=>x.id!==id);save();renderCutAll();}}
+function delCut(id){const c=DB.cuts.find(x=>x.id===id); if(!c)return;
+  if(!delAllowed(c,'Cutting order '+c.no))return;
+  const added=Number(c.stockAdded||0), m=matById(c.mat);
+  if(!confirm(`Delete cutting order ${c.no} completely?${added&&m?`\n\n• ${fmt(added,3)} CFT of ${m.name} sheets will be removed from stock`:''}\n\nThis cannot be undone.`))return;
+  if(added&&m){ if(ERP_OK)postMove(m,'adjust',-added,{ref:c.no,note:`Cutting ${c.no} deleted — sheets removed`}); else m.cur=+(Number(m.cur||0)-added).toFixed(3); }
+  DB.cuts=DB.cuts.filter(x=>x.id!==id);save();renderCutTab();}
 function viewCut(id){const c=DB.cuts.find(x=>x.id===id);
   openModal(`<div class="row"><b style="font-size:16px">Cutting Order ${c.no}</b><div class="spacer"></div>
     <button class="btn ghost sm" onclick='docPDF("cut",${JSON.stringify(id)})'>⬇ PDF</button>
@@ -1840,7 +1876,7 @@ function renderCutting(){
       <td><span class="pill ${c.status==='completed'?'ok':'low'}">${c.status==='completed'?'DONE':'ISSUED'}</span></td>
       <td class="num noprint"><button class="btn ghost sm" onclick='viewCut(${JSON.stringify(c.id)})'>View</button>
       <button class="btn ghost sm" onclick='editCut(${JSON.stringify(c.id)})'>Edit</button>
-      ${c.status!=='completed'?` <button class="btn g sm" onclick='completeCut(${JSON.stringify(c.id)})'>Result</button>`:''}</td></tr>`;}).join('')
+      ${c.status!=='completed'?` <button class="btn g sm" onclick='completeCut(${JSON.stringify(c.id)})'>Result</button>`:''} ${delBtn('cut',c)}</td></tr>`;}).join('')
     +`</tbody></table>`:`<p class="muted small">No cutting orders yet.</p>`;
 }
 
@@ -1917,7 +1953,7 @@ function commitCut(id){
   if(mm&&(o.sL>o.L||o.sW>o.W)){alert("Sheet size can't be bigger than the block.");return;}
   if(!o.planned.length){alert("Add at least one thickness with quantity.");return;}
   if(id){const c=DB.cuts.find(x=>x.id===id);Object.assign(c,o);logEdit(c);}
-  else{o.id=uid();o.no=cutRef(DB.cutSeq);o.status='issued';o.result=null;DB.cuts.push(o);DB.cutSeq++;}
+  else{o.id=uid();o.no=cutRef(DB.cutSeq);o.status='issued';o.result=null;o.createdAt=new Date().toISOString();DB.cuts.push(o);DB.cutSeq++;}
   save();closeModal();renderCutTab();
 }
 let CUTRES=[], currentCutId=null;
@@ -2195,11 +2231,13 @@ function renderQuiltAll(){
         <button class="btn ghost sm" onclick='docPDF("quilt",${JSON.stringify(j.id)})'>PDF</button>
         ${j.status!=='received'?`<button class="btn g sm" onclick='addReceipt(${JSON.stringify(j.id)})'>+Lot</button>`:''}
         <button class="btn ghost sm" onclick='editQuilt(${JSON.stringify(j.id)})'>Edit</button>
-        <button class="btn danger ghost sm" onclick='delQuilt(${JSON.stringify(j.id)})'>✕</button></td></tr>`;}).join('')
+        ${delBtn('quilt',j)}</td></tr>`;}).join('')
     +`</tbody></table>`:`<p class="muted small" style="padding:14px">No quilting jobs in this range.</p>`;
 }
-function delQuilt(id){const j=DB.quiltJobs.find(x=>x.id===id);
-  if(confirm("Delete quilting job "+j.no+"?")){DB.quiltJobs=DB.quiltJobs.filter(x=>x.id!==id);save();renderQuiltAll();}}
+function delQuilt(id){const j=DB.quiltJobs.find(x=>x.id===id); if(!j)return;
+  if(!delAllowed(j,'Quilting job '+j.no))return;
+  if(!confirm(`Delete quilting job ${j.no} completely?${(j.receipts||[]).length?`\n\n• ${j.receipts.length} received lot(s) will be deleted too`:''}\n\nThis cannot be undone.`))return;
+  DB.quiltJobs=DB.quiltJobs.filter(x=>x.id!==id);save();renderQuiltTab();}
 function viewQuilt(id){const j=DB.quiltJobs.find(x=>x.id===id);
   openModal(`<div class="row"><b style="font-size:16px">Quilting Job ${j.no}</b><div class="spacer"></div>
     <button class="btn ghost sm" onclick='docPDF("quilt",${JSON.stringify(id)})'>⬇ PDF</button>
@@ -2229,7 +2267,7 @@ function renderQuilting(){
       <td class="num noprint"><button class="btn ghost sm" onclick='printQuilt(${JSON.stringify(j.id)})'>Print</button>
         ${j.status!=='received'?` <button class="btn g sm" onclick='addReceipt(${JSON.stringify(j.id)})'>+ Receipt</button>
           <button class="btn ghost sm" onclick='closeQuilt(${JSON.stringify(j.id)})'>Close</button>`:''}
-        <button class="btn ghost sm" onclick='editQuilt(${JSON.stringify(j.id)})'>Edit</button></td></tr>`;}).join('')
+        <button class="btn ghost sm" onclick='editQuilt(${JSON.stringify(j.id)})'>Edit</button> ${delBtn('quilt',j)}</td></tr>`;}).join('')
     +`</tbody></table>`:`<p class="muted small">No quilting jobs yet.</p>`;
 }
 let QSETS=[];
@@ -2285,7 +2323,7 @@ function commitQuilt(id){
   if(!o.quilter){alert("Quilter name required.");return;}
   if(!sets.length){alert("Add at least one product set (fabric + foam).");return;}
   if(id){const j=DB.quiltJobs.find(x=>x.id===id);Object.assign(j,o);logEdit(j);}
-  else{o.id=uid();o.status='issued';o.receipts=[];DB.quiltJobs.push(o);DB.quiltSeq++;}
+  else{o.id=uid();o.status='issued';o.receipts=[];o.createdAt=new Date().toISOString();DB.quiltJobs.push(o);DB.quiltSeq++;}
   save();closeModal();renderQuiltTab();
 }
 function addReceipt(id){
