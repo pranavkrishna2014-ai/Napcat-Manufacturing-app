@@ -354,7 +354,7 @@
         <p class="lead">How far past Recommended before something is flagged RED. Only you see these.</p>
         <div class="card grid g3">
           <div><label class="f">Work Order — over-usage %</label><input id="setWO" type="number"><div class="hint">Foam/latex actual over recommended by more than this %.</div></div>
-          <div><label class="f">Block Cutting — wastage %</label><input id="setCut" type="number"><div class="hint">Block CFT lost to skin + wastage above this %.</div></div>
+          <div><label class="f">Block Cutting — contingent %</label><input id="setCut" type="number"><div class="hint">Flag when block CFT minus sheets CFT is above this %.</div></div>
           <div><label class="f">Quilting — shortfall %</label><input id="setQuilt" type="number"><div class="hint">Received less than issued by more than this %.</div></div>
           <div><label class="f">Default warranty (years)</label><input id="setWY" type="number"><div class="hint">Total warranty from invoice date.</div></div>
           <div><label class="f">Of which replacement (years)</label><input id="setRY" type="number"><div class="hint">e.g. 3 years replacement + 7 years service.</div></div>
@@ -414,7 +414,7 @@
     <div class="cutSub" id="cutSub-create">
       <div class="row"><h2 class="section" style="font-size:16px">Foam Block Cutting</h2><div class="spacer noprint"></div>
         <button class="btn" onclick="editCut(null)">+ New cutting order</button></div>
-      <p class="lead">Each cutting order holds its block details (grade, size, supplier, invoice). Record actual sheets, skin &amp; wastage — fresh sheets flow back into that foam's stock.</p>
+      <p class="lead">Each cutting order holds its block details (grade, size, supplier, invoice). Length &amp; breadth in inches, height &amp; sheet thickness in mm. Record the actual block size and sheets cut — the contingent (block CFT − sheets CFT) is calculated automatically and fresh sheets flow into that foam's stock.</p>
       <div class="grid g4" id="cutKpis"></div>
       <div class="card"><b>Cutting orders</b>
         <div style="margin-top:10px;overflow:auto" id="cutList"></div></div>
@@ -907,7 +907,7 @@ function cutFlag(c){
   if(!c.result||!c.result.blockCFT)return{flag:false};
   const wastePct=(c.result.blockCFT-c.result.sheetsCFT)/c.result.blockCFT*100;
   const tol=Number(DB.settings.flagCut||0);
-  return{flag:wastePct>tol,wastePct,reason:`Wastage ${fmt(wastePct,1)}% (skin ${fmt(c.result.skinCFT,2)} + waste ${fmt(c.result.wastage,2)} CFT)`};
+  return{flag:wastePct>tol,wastePct,reason:`Contingent ${fmt(wastePct,1)}% (${fmt(c.result.blockCFT-c.result.sheetsCFT,3)} CFT of ${fmt(c.result.blockCFT,3)} CFT block)`};
 }
 function quiltRecv(j){return (j.receipts||[]).reduce((s,r)=>s+(+r.recvM||0),0);}
 function quiltSets(j){return (j.sets&&j.sets.length)?j.sets:[{fabric:j.fabric||'',fabM:+j.fabM||0,foam:j.foam||'',foamM:+j.foamM||0}];}
@@ -1304,13 +1304,15 @@ function getResult(){
     } else if(A.subMat){
       subUsed=(matById(A.subMat)||{}).name||null;
     }
-    return{name:l.name,unit:l.unit,usageNote:l.usageNote,recommended:l.total,matId:l.matId,
+    return{name:l.name,unit:l.unit,usageNote:l.usageNote,recommended:l.total,matId:l.matId,spec:(A.spec||'').trim()||undefined,
       actual:a.val,entered:a.entered,contingent:a.entered?(a.val-l.total):null,sheets,subUsed};});
   return{lines,errors:r.errors,dims:d};
 }
 // Human-readable description of the foam sizes / material Shiva actually entered.
 // One line per sheet type: "3 pcs - 78x72x2 = 5.850 cft" with its own cubic feet.
 function lineDetailRows(l){
+  const base=lineDetailRowsBase(l); return l.spec?['Size: '+l.spec].concat(base):base;}
+function lineDetailRowsBase(l){
   if(l.sheets&&l.sheets.length)
     return l.sheets.map(s=>{const cft=(s.l*s.w*s.t/1728)*s.qty;
       return `${s.qty} pcs - ${s.l}x${s.w}x${s.t} = ${fmt(cft,3)} cft${(s.mat&&s.mat!==l.name)?' ['+s.mat+']':''}`;});
@@ -1391,6 +1393,9 @@ function renderCalc(){
       body=subSel+`<div class="row"><label class="tag">Actual used (${l.unit}):</label>
         <input type="number" step="0.001" style="max-width:160px" value="${a.value}" oninput="setVal(${i},this.value)" placeholder="metres / pcs used"></div>`;
     }
+    const isSpring=l.rule==='spring'||((matById(l.matId)||{}).cat==='Spring');
+    const specBox=isSpring?`<div class="row" style="margin:-2px 0 8px 0"><label class="tag">🌀 Spring / coil size used (reference):</label>
+        <input style="max-width:340px" value="${escH((WOACT[i]||{}).spec||'')}" oninput="setSpec(${i},this.value)" placeholder="e.g. 72×36 unit · 6&quot; coil · 2.2 mm wire · 5 turns"></div>`:'';
     return `<div class="lncard">
       <div class="lnhead">
         <div><b>${l.name}</b> <span class="tag">${l.usageNote}</span></div>
@@ -1400,7 +1405,7 @@ function renderCalc(){
           <span class="tag" style="margin-left:10px">Contingent</span> <span id="cont_${i}">${contChip}</span>
           <span class="chip" style="margin-left:8px">${l.unit}</span>
         </div>
-      </div>${body}</div>`;
+      </div>${specBox}${body}</div>`;
   }).join('')+`<div class="hint">Recommended = BOM calculation × quantity (set by you). Actual = the sheets Shiva actually used. Contingent = Actual − Recommended (green = exact match, orange = extra used, red = short).</div>`;
 }
 // ---- live totals without rebuilding inputs (keeps focus) ----
@@ -1421,6 +1426,7 @@ function refreshTotals(){
 }
 function setSheet(i,j,f,v){WOACT[i].rows[j][f]=+v;refreshTotals();}
 function setVal(i,v){WOACT[i].value=v;refreshTotals();}
+function setSpec(i,v){WOACT[i]=WOACT[i]||{type:'val',value:''};WOACT[i].spec=v;}
 function setSheetMat(i,j,v){WOACT[i].rows[j].mat=v;renderCalc();}
 function applyPreset(i,j,k){if(k==='')return;const m=matById(WOACT[i].rows[j].mat);const s=m.sheets[+k];
   Object.assign(WOACT[i].rows[j],{l:s.l,w:s.w,t:s.t});if(!WOACT[i].rows[j].qty)WOACT[i].rows[j].qty=1;renderCalc();}
@@ -1785,12 +1791,12 @@ function renderCutAll(){
   const list=DB.cuts.filter(c=>inRange(c.date||'',from,to)).slice().reverse();
   document.getElementById('cutCount').textContent=list.length+' of '+DB.cuts.length;
   document.getElementById('cutAllList').innerHTML= list.length?`<table><thead><tr>
-    <th>Cut #</th><th>Date</th><th>Grade</th><th class="num">Block size</th><th>Supplier</th><th>Invoice</th><th class="num">Sheets CFT</th><th class="num">Yield</th><th>Status</th><th class="noprint"></th>
+    <th>Cut #</th><th>Date</th><th>Grade</th><th class="num">Block size × blocks</th><th>Supplier</th><th>Invoice</th><th class="num">Block CFT</th><th class="num">Sheets CFT</th><th class="num">Contingent CFT</th><th class="num">Yield</th><th>Status</th><th class="noprint"></th>
     </tr></thead><tbody>`+list.map(c=>{
       const out=c.result?c.result.sheetsCFT:0;const yld=c.result&&c.result.blockCFT?100*out/c.result.blockCFT:0;
       return `<tr><td><b>${c.no}</b>${c.edited?' <span class="pill low">EDITED</span>':''}</td><td>${c.date||''}</td><td>${cutGradeName(c)}</td>
-      <td class="num">${c.L}×${c.W}×${c.H}×${c.qty}</td><td>${c.supplier||'-'}</td><td>${c.invoiceNo||'-'}</td>
-      <td class="num">${c.result?fmt(out,2):'—'}</td><td class="num">${c.result?fmt(yld,1)+'%':'—'}</td>
+      <td class="num">${cutSize(c)} × ${c.qty}</td><td>${c.supplier||'-'}</td><td>${c.invoiceNo||'-'}</td>
+      <td class="num">${fmt(blockCFT(c),2)}</td><td class="num">${c.result?fmt(out,2):'—'}</td><td class="num">${c.result?fmt(cutCont(c),3):'—'}</td><td class="num">${c.result?fmt(yld,1)+'%':'—'}</td>
       <td><span class="pill ${c.status==='completed'?'ok':'low'}">${c.status==='completed'?'DONE':'ISSUED'}</span></td>
       <td class="num noprint">
         <button class="btn ghost sm" onclick='viewCut(${JSON.stringify(c.id)})'>View</button>
@@ -1808,7 +1814,11 @@ function viewCut(id){const c=DB.cuts.find(x=>x.id===id);
     <button class="btn ghost sm" onclick="closeModal()">Close</button></div>
     <div style="margin-top:12px">${buildCutSheet(c)}</div>`);
 }
-function blockCFT(c){return (c.L*c.W*c.H/1728)*(c.qty||1);}
+const MMCFT=43891.2; // = 1728 × 25.4 : L(in) × B(in) × H(mm) ÷ 43891.2 = CFT
+function isMM(c){return !!c&&c.v===2;}
+function blockCFT(c){return isMM(c)?(c.L*c.W*c.H/MMCFT)*(c.qty||1):(c.L*c.W*c.H/1728)*(c.qty||1);}
+function cutSize(c){return isMM(c)?`${c.L}×${c.W}" × ${c.H}mm`:`${c.L}×${c.W}×${c.H}"`;}
+function cutCont(c){const r=c.result;if(!r)return null;return isMM(c)?r.contingent:(r.blockCFT-r.sheetsCFT);}
 function cutGradeName(c){const m=matById(c.mat);return m?m.name:'?';}
 function renderCutting(){
   const k=[["Open cutting orders",DB.cuts.filter(c=>c.status==='issued').length],
@@ -1818,14 +1828,14 @@ function renderCutting(){
   document.getElementById('cutKpis').innerHTML=k.map(([l,v])=>`<div class="kpi"><div class="v">${v}</div><div class="l">${l}</div></div>`).join('');
   const cl=DB.cuts.slice().reverse().slice(0,50);
   document.getElementById('cutList').innerHTML= cl.length?`<table><thead><tr>
-    <th>Cut #</th><th>Date</th><th>Grade · Block size</th><th>Supplier</th><th>Planned</th><th class="num">Sheets CFT</th><th class="num">Yield</th><th>Status</th><th class="noprint"></th>
+    <th>Cut #</th><th>Date</th><th>Grade · Block size</th><th>Supplier</th><th>Planned</th><th class="num">Sheets CFT</th><th class="num">Contingent</th><th class="num">Yield</th><th>Status</th><th class="noprint"></th>
     </tr></thead><tbody>`+cl.map(c=>{
-      const planned=c.planned.map(p=>`${p.count}×${p.thk}"`).join(', ');
+      const planned=c.planned.map(p=>`${p.count}×${p.thk}${isMM(c)?'mm':'"'}`).join(', ');
       const outCFT=c.result?c.result.sheetsCFT:0; const yld=c.result&&c.result.blockCFT?100*outCFT/c.result.blockCFT:0;
       return `<tr><td><b>${c.no}</b></td><td>${c.date||''}</td>
-      <td>${cutGradeName(c)}<div class="tag">${c.L}×${c.W}×${c.H} × ${c.qty}</div></td>
+      <td>${cutGradeName(c)}<div class="tag">${cutSize(c)} × ${c.qty}</div></td>
       <td>${c.supplier||'-'}<div class="tag">${c.invoiceNo||''}</div></td>
-      <td class="small">${planned||'—'}</td><td class="num">${c.result?fmt(outCFT,3):'—'}</td>
+      <td class="small">${planned||'—'}</td><td class="num">${c.result?fmt(outCFT,3):'—'}</td><td class="num">${c.result?fmt(cutCont(c),3):'—'}</td>
       <td class="num">${c.result?fmt(yld,1)+'%':'—'}</td>
       <td><span class="pill ${c.status==='completed'?'ok':'low'}">${c.status==='completed'?'DONE':'ISSUED'}</span></td>
       <td class="num noprint"><button class="btn ghost sm" onclick='viewCut(${JSON.stringify(c.id)})'>View</button>
@@ -1835,9 +1845,14 @@ function renderCutting(){
 }
 
 let CUTPLAN=[];
+/* Cutting orders from Oct 2026 (v:2): block & sheet LENGTH/BREADTH in inches, HEIGHT/THICKNESS in millimetres.
+   CFT = L(in) × B(in) × H(mm) ÷ 43891.2.  Contingent = block CFT − sheets CFT (auto).
+   Older orders (no v) stay in inches with the old skin/wastage fields and are shown as before. */
+function cutU(c){return isMM(c)?'mm':'in';}
 function editCut(id){
-  const c=id?DB.cuts.find(x=>x.id===id):{no:cutRef(DB.cutSeq),date:today(),mat:(foamMats()[0]||{}).id,L:'',W:'',H:'',qty:1,supplier:'',invoiceNo:'',planned:[{thk:1,count:1}]};
-  CUTPLAN=JSON.parse(JSON.stringify(c.planned||[{thk:1,count:1}]));
+  const c=id?DB.cuts.find(x=>x.id===id):{v:2,no:cutRef(DB.cutSeq),date:today(),mat:(foamMats()[0]||{}).id,L:'',W:'',H:'',sL:'',sW:'',qty:1,supplier:'',invoiceNo:'',planned:[{thk:'',count:1}]};
+  const mm=isMM(c);
+  CUTPLAN=JSON.parse(JSON.stringify(c.planned||[{thk:'',count:1}]));
   const opts=foamMats().map(m=>`<option value="${m.id}" ${m.id===c.mat?'selected':''}>${m.name}</option>`).join('');
   openModal(`<div class="row"><b style="font-size:16px">${id?'Edit':'New'} Cutting Order</b><div class="spacer"></div>
       <button class="btn ghost sm" onclick="closeModal()">Cancel</button></div>
@@ -1845,41 +1860,61 @@ function editCut(id){
       <div><label class="f">Cutting order #</label><input id="cNo" value="${c.no}" ${id?'':'readonly'}></div>
       <div><label class="f">Date</label><input id="cDate" type="date" value="${c.date||today()}"></div>
       <div><label class="f">Foam grade</label><select id="cMat">${opts}</select></div>
-      <div><label class="f">Supplier name</label><input id="cSup" value="${c.supplier||''}"></div>
-      <div><label class="f">Supplier invoice #</label><input id="cInv" value="${c.invoiceNo||''}"></div>
-      <div></div>
-      <div><label class="f">Block length (in)</label><input id="cL" type="number" value="${c.L}" oninput="cutBlkCft()"></div>
-      <div><label class="f">Block breadth (in)</label><input id="cW" type="number" value="${c.W}" oninput="cutBlkCft()"></div>
-      <div><label class="f">Block height (in)</label><input id="cH" type="number" value="${c.H}" oninput="cutBlkCft()"></div>
+      <div><label class="f">Supplier name</label><input id="cSup" value="${escH(c.supplier||'')}"></div>
+      <div><label class="f">Supplier invoice #</label><input id="cInv" value="${escH(c.invoiceNo||'')}"></div>
       <div><label class="f">No. of blocks</label><input id="cQty" type="number" value="${c.qty||1}" oninput="cutBlkCft()"></div>
     </div>
-    <div class="banner info" style="display:block">Total block volume: <b id="cBlkCft">0</b> CFT</div>
-    <div class="row"><b>Thicknesses required</b><span class="tag">what Shiva wants sliced</span><div class="spacer"></div>
+    <div class="divider"></div>
+    <b>Block size ${mm?'(as received — can be corrected when recording the result)':''}</b>
+    <div class="grid g3" style="margin-top:8px">
+      <div><label class="f">Block length (in)</label><input id="cL" type="number" step="0.1" value="${c.L}" oninput="cutBlkCft()"></div>
+      <div><label class="f">Block breadth (in)</label><input id="cW" type="number" step="0.1" value="${c.W}" oninput="cutBlkCft()"></div>
+      <div><label class="f">Block height (${cutU(c)})</label><input id="cH" type="number" step="${mm?1:0.5}" value="${c.H}" oninput="cutBlkCft()"></div>
+    </div>
+    ${mm?`<b style="display:block;margin-top:10px">Required sheet size</b>
+    <div class="grid g3" style="margin-top:8px">
+      <div><label class="f">Sheet length (in)</label><input id="cSL" type="number" step="0.1" value="${c.sL||''}" placeholder="e.g. 75" oninput="cutBlkCft()"></div>
+      <div><label class="f">Sheet breadth (in)</label><input id="cSW" type="number" step="0.1" value="${c.sW||''}" placeholder="e.g. 48" oninput="cutBlkCft()"></div>
+      <div></div></div>`:''}
+    <div class="banner info" style="display:block;margin-top:10px" id="cBlkInfo"></div>
+    <div class="row"><b>Thicknesses required</b><span class="tag">sheet thickness in ${mm?'millimetres':'inches'} · total sheets</span><div class="spacer"></div>
       <button class="btn sm" onclick="addCutPlan()">+ Add thickness</button></div>
     <div id="cutPlanBox" style="margin-top:8px"></div>
     <div class="divider"></div>
     <div class="row"><div class="spacer"></div><button class="btn g" onclick='commitCut(${JSON.stringify(id)})'>Save &amp; issue</button></div>`);
-  renderCutPlan(); cutBlkCft();
+  window.__cutEditMM=mm; renderCutPlan(); cutBlkCft();
 }
-function cutBlkCft(){const v=x=>+document.getElementById(x).value;
-  const c=(v('cL')*v('cW')*v('cH')/1728)*(v('cQty')||1);
-  document.getElementById('cBlkCft').textContent=fmt(c,3);}
+function cutBlkCft(){
+  const v=x=>{const e=document.getElementById(x);return e?+e.value||0:0;}; const mm=window.__cutEditMM;
+  const q=v('cQty')||1;
+  if(!mm){document.getElementById('cBlkInfo').innerHTML=`Total block volume: <b>${fmt((v('cL')*v('cW')*v('cH')/1728)*q,3)}</b> CFT`;return;}
+  const bl=v('cL')*v('cW')*v('cH')/MMCFT*q;
+  const sL=v('cSL')||v('cL'), sW=v('cSW')||v('cW');
+  const tot=CUTPLAN.reduce((s,p)=>s+(+p.thk||0)*(+p.count||0),0);
+  const sh=sL*sW*tot/MMCFT, perBlk=tot/q;
+  document.getElementById('cBlkInfo').innerHTML=`Block volume: <b>${fmt(bl,3)}</b> CFT · Planned sheets: <b>${fmt(sh,3)}</b> CFT (${fmt(perBlk,1)} mm per block) · Expected contingent: <b>${fmt(bl-sh,3)}</b> CFT`+
+    (v('cH')&&perBlk>v('cH')?` <span class="pill crit">sheets thicker than block height</span>`:'');
+}
 function renderCutPlan(){
+  const mm=window.__cutEditMM;
   document.getElementById('cutPlanBox').innerHTML=CUTPLAN.map((p,i)=>`
-    <div class="sheetrow" style="grid-template-columns:1fr 100px 100px auto">
-      <span class="tag">Sheet thickness (in)</span>
-      <input type="number" step="0.5" value="${p.thk||''}" oninput="CUTPLAN[${i}].thk=+this.value" placeholder="thk">
-      <input type="number" step="1" value="${p.count||''}" oninput="CUTPLAN[${i}].count=+this.value" placeholder="qty">
-      <button class="btn danger ghost sm" onclick="CUTPLAN.splice(${i},1);renderCutPlan()">✕</button>
+    <div class="sheetrow" style="grid-template-columns:1fr 110px 100px auto">
+      <span class="tag">Sheet thickness (${mm?'mm':'in'}) · no. of sheets</span>
+      <input type="number" step="${mm?1:0.5}" value="${p.thk||''}" oninput="CUTPLAN[${i}].thk=+this.value;cutBlkCft()" placeholder="${mm?'mm':'in'}">
+      <input type="number" step="1" value="${p.count||''}" oninput="CUTPLAN[${i}].count=+this.value;cutBlkCft()" placeholder="qty">
+      <button class="btn danger ghost sm" onclick="CUTPLAN.splice(${i},1);renderCutPlan();cutBlkCft()">✕</button>
     </div>`).join('')||'<p class="muted small">Add at least one thickness.</p>';
 }
-function addCutPlan(){CUTPLAN.push({thk:1,count:1});renderCutPlan();}
+function addCutPlan(){CUTPLAN.push({thk:'',count:1});renderCutPlan();cutBlkCft();}
 function commitCut(id){
-  const v=x=>document.getElementById(x).value;
+  const v=x=>{const e=document.getElementById(x);return e?e.value:'';};
+  const mm=window.__cutEditMM;
   const o={mat:v('cMat'),L:+v('cL'),W:+v('cW'),H:+v('cH'),qty:+v('cQty')||1,
     supplier:v('cSup').trim(),invoiceNo:v('cInv').trim(),date:v('cDate'),
     planned:CUTPLAN.filter(p=>p.thk>0&&p.count>0)};
+  if(mm){o.v=2;o.sL=+v('cSL')||o.L;o.sW=+v('cSW')||o.W;}
   if(!(o.L>0&&o.W>0&&o.H>0)){alert("Enter valid block dimensions.");return;}
+  if(mm&&(o.sL>o.L||o.sW>o.W)){alert("Sheet size can't be bigger than the block.");return;}
   if(!o.planned.length){alert("Add at least one thickness with quantity.");return;}
   if(id){const c=DB.cuts.find(x=>x.id===id);Object.assign(c,o);logEdit(c);}
   else{o.id=uid();o.no=cutRef(DB.cutSeq);o.status='issued';o.result=null;DB.cuts.push(o);DB.cutSeq++;}
@@ -1887,6 +1922,88 @@ function commitCut(id){
 }
 let CUTRES=[], currentCutId=null;
 function completeCut(id){
+  const c=DB.cuts.find(x=>x.id===id);
+  if(!isMM(c))return completeCutLegacy(id);
+  CUTRES=c.result?JSON.parse(JSON.stringify(c.result.sheets)):JSON.parse(JSON.stringify(c.planned));
+  currentCutId=id;
+  openModal(`<div class="row"><b style="font-size:16px">Record cutting result · ${c.no}</b><div class="spacer"></div>
+      <button class="btn ghost sm" onclick="closeModal()">Cancel</button></div>
+    <div class="tag" style="margin-top:4px">${escH(cutGradeName(c))} · ${c.qty} block(s). Length &amp; breadth in inches, height &amp; thickness in mm. CFT = L × B × H(mm) ÷ 43891.2</div>
+    <div class="grid g3" style="margin-top:12px">
+      <div><label class="f">Actual block length (in)</label><input id="rBL" type="number" step="0.1" value="${c.L}" oninput="cutRecon2()"></div>
+      <div><label class="f">Actual block breadth (in)</label><input id="rBW" type="number" step="0.1" value="${c.W}" oninput="cutRecon2()"></div>
+      <div><label class="f">Actual block height (mm)</label><input id="rBH" type="number" step="1" value="${c.H}" oninput="cutRecon2()"></div>
+      <div><label class="f">Sheet cut length (in)</label><input id="rSL" type="number" step="0.1" value="${c.sL||c.L}" oninput="cutRecon2()"></div>
+      <div><label class="f">Sheet cut breadth (in)</label><input id="rSW" type="number" step="0.1" value="${c.sW||c.W}" oninput="cutRecon2()"></div>
+      <div></div>
+    </div>
+    <div class="row" style="margin-top:6px"><b>Sheets that came out</b><span class="tag">thickness in mm · total sheets from all blocks</span><div class="spacer"></div><button class="btn sm" onclick="addCutRes()">+ Add</button></div>
+    <div id="cutResBox" style="margin-top:8px"></div>
+    <div id="reconBox" style="margin-top:10px;overflow:auto"></div>
+    <div style="margin-top:10px"><label class="f">Notes</label><input id="rNotes" value="${escH(c.result?(c.result.notes||''):'')}" placeholder="e.g. top skin 25 mm, block undersized on one side"></div>
+    <div class="divider"></div>
+    <div class="row"><div class="spacer"></div><button class="btn g" onclick='saveCutResult(${JSON.stringify(id)})'>Complete cutting &amp; update stock</button></div>`);
+  renderCutRes(id); cutRecon2();
+}
+function renderCutRes(id){
+  const c=DB.cuts.find(x=>x.id===id); const mm=isMM(c);
+  document.getElementById('cutResBox').innerHTML=CUTRES.map((p,i)=>`
+    <div class="sheetrow" style="grid-template-columns:1fr 110px 100px 100px auto">
+      <span class="tag">Thickness (${mm?'mm':'in'}) · no. of sheets</span>
+      <input type="number" step="${mm?1:0.5}" value="${p.thk||''}" oninput="CUTRES[${i}].thk=+this.value;${mm?'cutRecon2()':`cutReconcile('${id}')`}" placeholder="thk">
+      <input type="number" step="1" value="${p.count||''}" oninput="CUTRES[${i}].count=+this.value;${mm?'cutRecon2()':`cutReconcile('${id}')`}" placeholder="qty">
+      <span class="cftout" id="crc_${i}"></span>
+      <button class="btn danger ghost sm" onclick="CUTRES.splice(${i},1);renderCutRes('${id}');${mm?'cutRecon2()':`cutReconcile('${id}')`}">✕</button>
+    </div>`).join('')||'<p class="muted small">Add the sheets that came out.</p>';
+}
+function addCutRes(){CUTRES.push({thk:'',count:1});renderCutRes(currentCutId);
+  const c=DB.cuts.find(x=>x.id===currentCutId); isMM(c)?cutRecon2():cutReconcile(currentCutId);}
+// v2 maths, shared by the live preview and by save
+function cutCalc2(c,b,sheets){
+  const q=c.qty||1, blk=b.L*b.W*b.H/MMCFT*q;
+  const totThk=sheets.reduce((s,p)=>s+(+p.thk||0)*(+p.count||0),0);
+  const sh=b.sL*b.sW*totThk/MMCFT, perBlk=totThk/q;
+  return {blockCFT:blk,sheetsCFT:sh,contingent:blk-sh,sheetH:perBlk,defL:b.L-b.sL,defW:b.W-b.sW,defH:b.H-perBlk};
+}
+function readCutDims(){const v=x=>+document.getElementById(x).value||0;
+  return {L:v('rBL'),W:v('rBW'),H:v('rBH'),sL:v('rSL'),sW:v('rSW')};}
+function cutRecon2(){
+  const c=DB.cuts.find(x=>x.id===currentCutId); const b=readCutDims();
+  CUTRES.forEach((p,i)=>{const el=document.getElementById('crc_'+i);if(el)el.textContent=fmt(b.sL*b.sW*(p.thk||0)*(p.count||0)/MMCFT,3)+' cft';});
+  const r=cutCalc2(c,b,CUTRES), pct=r.blockCFT?r.contingent/r.blockCFT*100:0;
+  const warn=r.defL<0||r.defW<0||r.defH<0;
+  document.getElementById('reconBox').innerHTML=`<table class="oneline"><thead><tr><th></th><th class="num">Length (in)</th><th class="num">Breadth (in)</th><th class="num">Height (mm)</th><th class="num">CFT${c.qty>1?' (all '+c.qty+' blocks)':''}</th></tr></thead><tbody>
+    <tr><td><b>Block</b></td><td class="num">${fmt(b.L,2)}</td><td class="num">${fmt(b.W,2)}</td><td class="num">${fmt(b.H,1)}</td><td class="num"><b>${fmt(r.blockCFT,3)}</b></td></tr>
+    <tr><td><b>Sheets cut</b></td><td class="num">${fmt(b.sL,2)}</td><td class="num">${fmt(b.sW,2)}</td><td class="num">${fmt(r.sheetH,1)}${c.qty>1?' / block':''}</td><td class="num"><b>${fmt(r.sheetsCFT,3)}</b></td></tr>
+    <tr style="background:#fff7e6"><td><b>Deficit → Contingent</b></td><td class="num">${fmt(r.defL,2)}</td><td class="num">${fmt(r.defW,2)}</td><td class="num">${fmt(r.defH,1)}</td>
+      <td class="num"><b style="color:var(--warn)">${fmt(r.contingent,3)}</b> <span class="tag">(${fmt(pct,1)}%)</span></td></tr></tbody></table>
+    ${warn?`<div class="banner err" style="display:block;margin-top:8px">⚠ Sheets are bigger than the block in at least one direction — check the numbers.</div>`:''}`;
+}
+function saveCutResult(id){
+  const c=DB.cuts.find(x=>x.id===id);
+  if(!isMM(c))return saveCutResultLegacy(id);
+  const sheets=CUTRES.filter(p=>p.thk>0&&p.count>0);
+  if(!sheets.length){alert("Enter the sheets that came out.");return;}
+  const b=readCutDims(); if(!(b.L>0&&b.W>0&&b.H>0&&b.sL>0&&b.sW>0)){alert("Enter the block and sheet sizes.");return;}
+  const r=cutCalc2(c,b,sheets);
+  if((r.defL<0||r.defW<0||r.defH<0)&&!confirm('Sheets come out bigger than the block in at least one direction. Save anyway?'))return;
+  const wasResult=!!c.result;
+  Object.assign(c,{L:b.L,W:b.W,H:b.H,sL:b.sL,sW:b.sW});
+  c.result={v:2,sheets,...r,notes:document.getElementById('rNotes').value,date:today()};
+  c.status='completed'; if(wasResult)logEdit(c);
+  const m=matById(c.mat);
+  if(m){ const delta=+(r.sheetsCFT-Number(c.stockAdded||0)).toFixed(3);
+    if(ERP_OK) postMove(m,'cut-in',delta,{ref:c.no,note:'Fresh sheets from block cutting'+(c.stockAdded?' (re-recorded)':'')});
+    else m.cur=+(Number(m.cur||0)+delta).toFixed(3);
+    c.stockAdded=r.sheetsCFT; m.sheets=m.sheets||[];
+    // floor sheet sizes are kept in inches for the work-order screen
+    sheets.forEach(p=>{const t=+(p.thk/25.4).toFixed(2); if(!m.sheets.some(s=>s.l===b.sL&&s.w===b.sW&&s.t===t)) m.sheets.push({l:b.sL,w:b.sW,t}); }); }
+  save();closeModal();renderCutTab();
+  alert(`Cutting recorded.\n\nSheets: ${fmt(r.sheetsCFT,3)} CFT added to ${m?m.name:''} stock.\nContingent: ${fmt(r.contingent,3)} CFT.`);
+}
+
+/* ---- legacy (inch) cutting orders created before Oct 2026 ---- */
+function completeCutLegacy(id){
   const c=DB.cuts.find(x=>x.id===id);
   CUTRES=c.result?JSON.parse(JSON.stringify(c.result.sheets)):JSON.parse(JSON.stringify(c.planned));
   openModal(`<div class="row"><b style="font-size:16px">Record cutting result · ${c.no}</b><div class="spacer"></div>
@@ -1904,19 +2021,8 @@ function completeCut(id){
     </div>
     <div class="banner info" id="reconBox" style="display:block"></div>
     <div class="row"><div class="spacer"></div><button class="btn g" onclick='saveCutResult(${JSON.stringify(id)})'>Complete cutting &amp; update stock</button></div>`);
-  renderCutRes(id); cutReconcile(id);
+  currentCutId=id; renderCutRes(id); cutReconcile(id);
 }
-function renderCutRes(id){
-  document.getElementById('cutResBox').innerHTML=CUTRES.map((p,i)=>`
-    <div class="sheetrow" style="grid-template-columns:1fr 100px 100px 90px auto">
-      <span class="tag">Thickness (in)</span>
-      <input type="number" step="0.5" value="${p.thk||''}" oninput="CUTRES[${i}].thk=+this.value;cutReconcile('${id}')" placeholder="thk">
-      <input type="number" step="1" value="${p.count||''}" oninput="CUTRES[${i}].count=+this.value;cutReconcile('${id}')" placeholder="qty">
-      <span class="cftout" id="crc_${i}"></span>
-      <button class="btn danger ghost sm" onclick="CUTRES.splice(${i},1);renderCutRes('${id}');cutReconcile('${id}')">✕</button>
-    </div>`).join('')||'<p class="muted small">Add the sheets that came out.</p>';
-}
-function addCutRes(){CUTRES.push({thk:1,count:1});renderCutRes(currentCutId);cutReconcile(currentCutId);}
 function cutReconcile(id){
   currentCutId=id; const c=DB.cuts.find(x=>x.id===id);
   const bl=blockCFT(c); let sheetsCFT=0;
@@ -1932,7 +2038,7 @@ function cutReconcile(id){
   const rb=document.getElementById('reconBox');
   if(rb)rb.innerHTML=`Block: <b>${fmt(bl,3)}</b> CFT &nbsp;=&nbsp; Sheets <b>${fmt(sheetsCFT,3)}</b> + Skin <b>${fmt(skinCFT,3)}</b> + Contingent <b>${fmt(cont,3)}</b> + Wastage <b>${fmt(waste,3)}</b> + Other <b>${fmt(other,3)}</b> &nbsp;→&nbsp; Unaccounted: <b>${fmt(bal,3)}</b> CFT · Yield <b>${fmt(yld,1)}%</b>`;
 }
-function saveCutResult(id){
+function saveCutResultLegacy(id){
   const c=DB.cuts.find(x=>x.id===id);
   const sheets=CUTRES.filter(p=>p.thk>0&&p.count>0);
   if(!sheets.length){alert("Enter the fresh sheets that came out.");return;}
@@ -1960,6 +2066,40 @@ function saveCutResult(id){
   alert(`Cutting recorded. ${fmt(sheetsCFT,3)} CFT of fresh ${m?m.name:''} sheets added to stock.`);
 }
 function buildCutSheet(c){
+  if(isMM(c))return buildCutSheet2(c);
+  return buildCutSheetLegacy(c);
+}
+function buildCutSheet2(c){
+  const r=c.result, planCFT=(c.sL||c.L)*(c.sW||c.W)*c.planned.reduce((s,p)=>s+p.thk*p.count,0)/MMCFT;
+  return `<div class="wo-sheet">
+    <div class="h"><div><div class="t">CUTTING ORDER</div><div class="tag">${escH(cutGradeName(c))}</div></div>
+      <div style="text-align:right"><div class="tag">CUT #</div><div class="t">${c.no}</div></div></div>
+    <div class="meta"><div><div class="lbl">Grade</div><div class="val">${escH(cutGradeName(c))}</div></div>
+      <div><div class="lbl">Blocks</div><div class="val">${c.qty}</div></div>
+      <div><div class="lbl">Sheet size</div><div class="val">${c.sL||c.L} × ${c.sW||c.W}"</div></div>
+      <div style="border-right:none"><div class="lbl">Date</div><div class="val">${c.date||''}</div></div>
+      <div><div class="lbl">Supplier</div><div class="val">${escH(c.supplier||'-')}</div></div>
+      <div><div class="lbl">Invoice #</div><div class="val">${escH(c.invoiceNo||'-')}</div></div>
+      <div><div class="lbl">Status</div><div class="val">${c.status==='completed'?'Done':'Issued'}</div></div>
+      <div style="border-right:none"><div class="lbl">Contingent</div><div class="val">${r?fmt(r.contingent,3)+' CFT':'—'}</div></div></div>
+    <h4>BLOCK vs SHEETS — L × B (inch) × H (mm) ÷ 43891.2</h4>
+    <table><thead><tr><th style="text-align:left"></th><th style="text-align:center">Length (in)</th><th style="text-align:center">Breadth (in)</th><th style="text-align:center">Height (mm)</th><th style="text-align:center">CFT</th></tr></thead><tbody>
+      <tr><td style="text-align:left"><b>Block</b></td><td style="text-align:center">${c.L}</td><td style="text-align:center">${c.W}</td><td style="text-align:center">${c.H}</td><td style="text-align:center">${fmt(blockCFT(c),3)}</td></tr>
+      <tr><td style="text-align:left"><b>Sheets ${r?'cut':'planned'}</b></td><td style="text-align:center">${c.sL||c.L}</td><td style="text-align:center">${c.sW||c.W}</td>
+        <td style="text-align:center">${r?fmt(r.sheetH,1):fmt(c.planned.reduce((s,p)=>s+p.thk*p.count,0)/(c.qty||1),1)}${c.qty>1?' / block':''}</td><td style="text-align:center">${fmt(r?r.sheetsCFT:planCFT,3)}</td></tr>
+      <tr><td style="text-align:left"><b>Deficit → Contingent</b></td><td style="text-align:center">${r?fmt(r.defL,2):'____'}</td><td style="text-align:center">${r?fmt(r.defW,2):'____'}</td><td style="text-align:center">${r?fmt(r.defH,1):'____'}</td><td style="text-align:center"><b>${r?fmt(r.contingent,3):'____'}</b></td></tr>
+    </tbody></table>
+    <h4>THICKNESSES CUT (mm)</h4>
+    <table><thead><tr><th style="text-align:left">Sheet thickness</th><th style="text-align:center">Qty planned</th><th style="text-align:center">Actual out</th><th style="text-align:center">Sheet CFT</th></tr></thead><tbody>
+    ${c.planned.map(p=>{const rr=r&&r.sheets.find(s=>s.thk===p.thk);
+      return `<tr><td style="text-align:left">${p.thk} mm</td><td style="text-align:center">${p.count}</td><td style="text-align:center">${rr?rr.count:'____'}</td><td style="text-align:center">${rr?fmt(c.sL*c.sW*p.thk*rr.count/MMCFT,3):'____'}</td></tr>`;}).join('')}
+    ${r?r.sheets.filter(s=>!c.planned.some(p=>p.thk===s.thk)).map(s=>`<tr><td style="text-align:left">${s.thk} mm <span class="tag">(extra)</span></td><td style="text-align:center">—</td><td style="text-align:center">${s.count}</td><td style="text-align:center">${fmt(c.sL*c.sW*s.thk*s.count/MMCFT,3)}</td></tr>`).join(''):''}
+    </tbody></table>
+    ${r&&r.notes?`<div style="padding:10px 14px" class="tag"><b>Notes:</b> ${escH(r.notes)}</div>`:''}
+    ${r?'':`<div style="padding:10px 14px" class="tag">Cutting in-charge: note the actual block size (L, B in inch · H in mm) and the sheets cut.</div>`}
+  </div>`;
+}
+function buildCutSheetLegacy(c){
   const done=c.result;
   return `<div class="wo-sheet">
     <div class="h"><div><div class="t">CUTTING ORDER</div><div class="tag">${cutGradeName(c)}</div></div>
@@ -2238,6 +2378,25 @@ function pdfWorkOrder(o){
   return doc;
 }
 function pdfCut(c){
+  if(!isMM(c))return pdfCutLegacy(c);
+  const doc=jpdf(); if(!doc)return doc;
+  const r=c.result, tot=c.planned.reduce((s,p)=>s+p.thk*p.count,0);
+  pdfHeader(doc,'CUTTING ORDER','CUT #',c.no);
+  let y=metaGrid(doc,[['Grade',cutGradeName(c)],['Blocks',c.qty],['Sheet size',`${c.sL||c.L} x ${c.sW||c.W} in`],['Date',c.date]],90);
+  y=metaGrid(doc,[['Supplier',c.supplier||'-'],['Invoice #',c.invoiceNo||'-'],['Status',c.status==='completed'?'Done':'Issued'],['Contingent',r?fmt(r.contingent,3)+' CFT':'____']],y+6);
+  doc.autoTable({startY:y+8,head:[['L x B (in) x H (mm) / 43891.2','Length (in)','Breadth (in)','Height (mm)','CFT']],
+    body:[['Block',c.L,c.W,c.H,fmt(blockCFT(c),3)],
+      ['Sheets '+(r?'cut':'planned'),c.sL||c.L,c.sW||c.W,r?fmt(r.sheetH,1):fmt(tot/(c.qty||1),1),fmt(r?r.sheetsCFT:(c.sL||c.L)*(c.sW||c.W)*tot/MMCFT,3)],
+      ['Deficit = Contingent',r?fmt(r.defL,2):'____',r?fmt(r.defW,2):'____',r?fmt(r.defH,1):'____',r?fmt(r.contingent,3):'____']],
+    ...tableStyle,columnStyles:{0:{halign:'left'}}});
+  const extra=r?r.sheets.filter(s=>!c.planned.some(p=>p.thk===s.thk)):[];
+  doc.autoTable({startY:doc.lastAutoTable.finalY+12,head:[['Sheet thickness (mm)','Qty planned','Actual out','Sheet CFT']],
+    body:c.planned.map(p=>{const rr=r&&r.sheets.find(s=>s.thk===p.thk);return [p.thk+' mm',p.count,rr?rr.count:'____',rr?fmt(c.sL*c.sW*p.thk*rr.count/MMCFT,3):'____'];})
+      .concat(extra.map(s=>[s.thk+' mm (extra)','—',s.count,fmt(c.sL*c.sW*s.thk*s.count/MMCFT,3)])),...tableStyle,columnStyles:{0:{halign:'left'}}});
+  if(r&&r.notes){doc.setFontSize(9);doc.setTextColor(90);doc.text('Notes: '+r.notes,40,doc.lastAutoTable.finalY+20);doc.setTextColor(0);}
+  return doc;
+}
+function pdfCutLegacy(c){
   const doc=jpdf(); if(!doc)return doc;
   const r=c.result;
   pdfHeader(doc,'CUTTING ORDER','CUT #',c.no);
@@ -2282,10 +2441,10 @@ function exportExcel(type){
     DB.orders.forEach(o=>(o.lines||[]).forEach((l,i)=>rows.push([i===0?o.num:'',i===0?o.date:'',i===0?o.brand:'',i===0?o.model:'',
       i===0?o.cust:'',i===0?o.city:'',i===0?o.agent:'',i===0?o.L:'',i===0?o.W:'',i===0?o.H:'',i===0?o.Q:'',
       l.name,fmt(l.recommended,3),l.entered?fmt(l.actual,3):'',l.contingent==null?'':fmt(l.contingent,3),l.unit])));
-  } else if(type==='cut'){rows.push(['Cut #','Date','Grade','Block L','Block W','Block H','Blocks','Supplier','Invoice #','Block CFT','Sheets out CFT','Skin CFT','Contingent CFT','Wastage CFT','Other CFT','Other reason','Yield %','Edited','Status']);
-    DB.cuts.forEach(c=>{const r=c.result;
-      rows.push([c.no,c.date,cutGradeName(c),c.L,c.W,c.H,c.qty,c.supplier||'',c.invoiceNo||'',fmt(blockCFT(c),3),r?fmt(r.sheetsCFT,3):'',r?fmt(r.skinCFT,3):'',r?fmt(r.contingent||0,3):'',r?fmt(r.wastage,3):'',r?fmt(r.otherCFT||0,3):'',r?(r.otherReason||''):'',
-        r&&r.blockCFT?fmt(100*r.sheetsCFT/r.blockCFT,1):'',c.edited?'YES':'',c.status]);});
+  } else if(type==='cut'){rows.push(['Cut #','Date','Grade','Block L (in)','Block B (in)','Block H','H unit','Blocks','Sheet L (in)','Sheet B (in)','Supplier','Invoice #','Block CFT','Sheets out CFT','Contingent CFT','Contingent %','L deficit (in)','B deficit (in)','H deficit (mm)','Notes','Edited','Status']);
+    DB.cuts.forEach(c=>{const r=c.result, mm=isMM(c), ct=cutCont(c);
+      rows.push([c.no,c.date,cutGradeName(c),c.L,c.W,c.H,mm?'mm':'in',c.qty,mm?(c.sL||c.L):c.L,mm?(c.sW||c.W):c.W,c.supplier||'',c.invoiceNo||'',fmt(blockCFT(c),3),r?fmt(r.sheetsCFT,3):'',
+        r?fmt(ct,3):'',r&&r.blockCFT?fmt(100*ct/r.blockCFT,1):'',r&&mm?fmt(r.defL,2):'',r&&mm?fmt(r.defW,2):'',r&&mm?fmt(r.defH,1):'',r?(r.notes||''):'',c.edited?'YES':'',c.status]);});
   } else {rows.push(['Job #','Date','Quilter','Fabric','Fabric m','Quilting foam','Foam m','Received m','Lots','Status']);
     DB.quiltJobs.forEach(j=>rows.push([j.no,j.date,j.quilter,j.fabric,j.fabM,j.foam,j.foamM,fmt(quiltRecv(j),1),(j.receipts||[]).length,j.status]));}
   const html='<table>'+rows.map(r=>'<tr>'+r.map(c=>`<td>${(c==null?'':String(c)).replace(/&/g,'&amp;').replace(/</g,'&lt;')}</td>`).join('')+'</tr>').join('')+'</table>';
