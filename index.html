@@ -29,7 +29,7 @@
     cursor:pointer;font-size:13px;font-weight:600}
   nav.tabs button:hover{color:var(--txt);background:var(--panel2)}
   nav.tabs button.active{color:#fff;background:var(--accent)}
-  main{padding:22px;max-width:1180px;margin:0 auto}
+  main{padding:22px;max-width:1400px;margin:0 auto}
   .view{display:none} .view.active{display:block}
   h2.section{font-size:20px;margin-bottom:4px}
   .lead{color:var(--muted);margin-bottom:18px;font-size:13px}
@@ -63,6 +63,16 @@
   .pill{font-size:11px;padding:2px 8px;border-radius:6px;font-weight:700}
   .pill.ok{background:#dcf6e8;color:#0f8a5c} .pill.low{background:#fdeccd;color:#a8620a}
   .pill.crit{background:#fdecea;color:#c8241a}
+  .pill.pend{background:#eef1f6;color:#4a5568}
+  /* one-line tables: every record on a single neat row */
+  table.oneline th,table.oneline td{white-space:nowrap;padding:8px 10px}
+  table.oneline td.ell{max-width:170px;overflow:hidden;text-overflow:ellipsis}
+  table.oneline td.wrap{white-space:normal;min-width:180px}
+  table.oneline td.acts{width:1%}
+  table.oneline td.acts .btn{margin-left:3px}
+  table.oneline tbody tr:nth-child(even) td{background:#fafbfd}
+  table.oneline tbody tr:hover td{background:#f0f4fb}
+  .btn[disabled]{opacity:.5;cursor:default}
   .layer-row{display:grid;grid-template-columns:1.6fr 1fr 1fr auto;gap:8px;margin-bottom:8px;align-items:center}
   .kpi{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:14px}
   .kpi .v{font-size:26px;font-weight:700} .kpi .l{color:var(--muted);font-size:12px}
@@ -118,6 +128,9 @@
     <button data-v="admin" data-role="admin">🔒 Admin Control</button>
     <button data-v="cutting">Block Cutting</button>
     <button data-v="quilting">Quilting</button>
+    <button data-v="stores">Stores</button>
+    <button data-v="dispatch">Dispatch</button>
+    <button data-v="warranty">Warranty</button>
     <button data-v="others">Others</button>
   </nav>
   <div class="row" style="gap:8px">
@@ -154,6 +167,9 @@
     <nav class="tabs" style="margin-bottom:14px" id="woTabs">
       <button data-w="create" class="active" onclick="showWO('create')">＋ Create Work Order</button>
       <button data-w="all" onclick="showWO('all')">📋 View / Edit Orders</button>
+      <button data-w="prod" onclick="showWO('prod')">🏭 Production</button>
+      <button data-w="inv" onclick="showWO('inv')">🧾 Invoice</button>
+      <button data-w="tally" onclick="showWO('tally')">📑 Tally WO</button>
     </nav>
 
     <!-- Create -->
@@ -237,6 +253,59 @@
       </div>
       <div class="card" style="padding:0;overflow:auto"><div id="woAllList"></div></div>
     </div>
+    <!-- Production -->
+    <div class="woSub" id="woSub-prod" style="display:none">
+      <div class="card">
+        <div class="row"><b>Production</b><span class="tag" id="prCount"></span><div class="spacer"></div>
+          <button class="btn ghost sm" onclick="issueModal()">− Issue material</button></div>
+        <div class="hint">Issue materials from stores, record finished mattresses (each gets a serial number + barcode label), and see what is ready to dispatch.</div>
+        <div class="row" style="margin-top:10px">
+          <input id="prF" placeholder="search WO #, customer or model" style="max-width:300px" oninput="renderProduction()">
+          <select id="prS" style="max-width:200px" onchange="renderProduction()"><option value="open">In progress / not started</option>
+            <option value="ready">Ready to dispatch</option><option value="done">Fully dispatched</option><option value="">All</option></select>
+        </div>
+      </div>
+      <div class="card" style="padding:0;overflow:auto"><div id="prodBody"></div></div>
+    </div>
+
+    <!-- Invoices against work orders -->
+    <div class="woSub" id="woSub-inv" style="display:none">
+      <div class="card">
+        <div class="row">
+          <b>Invoices against work orders</b><span class="tag" id="docCount-invoice"></span><div class="spacer"></div>
+          <button class="btn g sm" id="docUp-invoice" onclick="uploadDocModal('invoice')">＋ Upload Invoice PDF</button>
+        </div>
+        <div class="hint">Bills raised in Tally for each work order. Upload the PDF and Claude compares it with the work order — customer, model, size and quantity.</div>
+        <div class="row" style="margin-top:10px">
+          <input id="docF-invoice" placeholder="search WO #, customer, model or number" style="max-width:300px" oninput="renderDocTab('invoice')">
+          <select id="docS-invoice" style="max-width:190px" onchange="renderDocTab('invoice')">
+            <option value="">All</option><option value="pending">Not checked yet</option>
+            <option value="issue">Differences / unclear</option><option value="match">Matches</option></select>
+          <button class="btn ghost sm" onclick="document.getElementById('docF-invoice').value='';document.getElementById('docS-invoice').value='';renderDocTab('invoice')">Clear</button>
+        </div>
+        <div class="banner err" id="docSetup-invoice" style="display:none">Online document storage is not set up yet. Run the SQL from the setup guide in Supabase once, then reload.</div>
+      </div>
+      <div class="card" style="padding:0;overflow:auto"><div id="docBody-invoice"></div></div>
+    </div>
+    <!-- Tally work orders -->
+    <div class="woSub" id="woSub-tally" style="display:none">
+      <div class="card">
+        <div class="row">
+          <b>Tally work orders</b><span class="tag" id="docCount-tally"></span><div class="spacer"></div>
+          <button class="btn g sm" id="docUp-tally" onclick="uploadDocModal('tally')">＋ Upload Tally WO PDF</button>
+        </div>
+        <div class="hint">Work orders entered in Tally. Upload the PDF and Claude compares every line with the work order issued in this app.</div>
+        <div class="row" style="margin-top:10px">
+          <input id="docF-tally" placeholder="search WO #, customer, model or number" style="max-width:300px" oninput="renderDocTab('tally')">
+          <select id="docS-tally" style="max-width:190px" onchange="renderDocTab('tally')">
+            <option value="">All</option><option value="pending">Not checked yet</option>
+            <option value="issue">Differences / unclear</option><option value="match">Matches</option></select>
+          <button class="btn ghost sm" onclick="document.getElementById('docF-tally').value='';document.getElementById('docS-tally').value='';renderDocTab('tally')">Clear</button>
+        </div>
+        <div class="banner err" id="docSetup-tally" style="display:none">Online document storage is not set up yet. Run the SQL from the setup guide in Supabase once, then reload.</div>
+      </div>
+      <div class="card" style="padding:0;overflow:auto"><div id="docBody-tally"></div></div>
+    </div>
   </section>
 
   <!-- ADMIN CONTROL (role gated via login) -->
@@ -283,7 +352,10 @@
           <div><label class="f">Work Order — over-usage %</label><input id="setWO" type="number"><div class="hint">Foam/latex actual over recommended by more than this %.</div></div>
           <div><label class="f">Block Cutting — wastage %</label><input id="setCut" type="number"><div class="hint">Block CFT lost to skin + wastage above this %.</div></div>
           <div><label class="f">Quilting — shortfall %</label><input id="setQuilt" type="number"><div class="hint">Received less than issued by more than this %.</div></div>
-          <div style="grid-column:1/4"><button class="btn g" onclick="saveSettings()">Save tolerances</button></div>
+          <div><label class="f">Default warranty (years)</label><input id="setWY" type="number"><div class="hint">Total warranty from invoice date.</div></div>
+          <div><label class="f">Of which replacement (years)</label><input id="setRY" type="number"><div class="hint">e.g. 3 years replacement + 7 years service.</div></div>
+          <div><label class="f">Label printing</label><select id="setLbl"><option value="roll">Label printer — 100 × 50 mm roll</option><option value="a4">A4 sheet — 10 labels per page</option></select></div>
+          <div style="grid-column:1/4"><button class="btn g" onclick="saveSettings()">Save settings</button></div>
         </div>
       </div>
 
@@ -383,6 +455,73 @@
     </div>
   </section>
 
+
+  <!-- STORES (inventory ledger) -->
+  <section class="view" id="view-stores">
+    <div class="row"><h2 class="section">Stores</h2><div class="spacer"></div>
+      <button class="btn g" onclick="receiveModal()">＋ Receive stock</button>
+      <button class="btn" onclick="issueModal()">− Issue to work order</button>
+      <button class="btn ghost" id="stAdjBtn" onclick="adjustModal()">± Adjust (count)</button></div>
+    <p class="lead">Every receipt, issue and adjustment is written to the stock ledger — balances update automatically.</p>
+    <nav class="tabs" style="margin:0 0 14px 0" id="storeTabs">
+      <button data-s="stock" class="active" onclick="showStore('stock')">📦 Stock</button>
+      <button data-s="ledger" onclick="showStore('ledger')">📒 Ledger</button>
+    </nav>
+    <div class="storeSub" id="storeSub-stock">
+      <div id="stLow"></div>
+      <div class="card"><div class="row">
+        <input id="stF" placeholder="search material…" style="max-width:240px" oninput="renderStock()">
+        <select id="stCat" style="max-width:180px" onchange="renderStock()"><option value="">All categories</option></select></div></div>
+      <div class="card" style="padding:0;overflow:auto"><div id="stockBody"></div></div>
+    </div>
+    <div class="storeSub" id="storeSub-ledger" style="display:none">
+      <div class="card"><div class="row">
+        <select id="lgMat" style="max-width:240px" onchange="renderLedger()"><option value="">All materials</option></select>
+        <select id="lgType" style="max-width:180px" onchange="renderLedger()"><option value="">All types</option>
+          <option value="receipt">Receipt</option><option value="issue">Issue to WO</option><option value="return">Return</option>
+          <option value="adjust">Adjustment</option><option value="cut-in">Cutting → sheets</option></select>
+        <input id="lgWO" placeholder="WO # or invoice/DC" style="max-width:180px" oninput="renderLedger()">
+        <label class="tag">From</label><input type="date" id="lgFrom" style="max-width:150px" onchange="renderLedger()">
+        <label class="tag">To</label><input type="date" id="lgTo" style="max-width:150px" onchange="renderLedger()">
+        <span class="tag" id="lgCount"></span></div></div>
+      <div class="card" style="padding:0;overflow:auto"><div id="ledgerBody"></div></div>
+    </div>
+  </section>
+
+  <!-- DISPATCH -->
+  <section class="view" id="view-dispatch">
+    <div class="row"><h2 class="section">Dispatch</h2><div class="spacer"></div>
+      <button class="btn g" id="dpNew" onclick="dispatchModal()">＋ New dispatch</button></div>
+    <p class="lead" id="dpReady"></p>
+    <div class="card"><div class="row">
+      <input id="dpF" placeholder="search dispatch #, customer, invoice, vehicle, WO #" style="max-width:340px" oninput="renderDispatch()">
+      <label class="tag">From</label><input type="date" id="dpFrom" style="max-width:150px" onchange="renderDispatch()">
+      <label class="tag">To</label><input type="date" id="dpTo" style="max-width:150px" onchange="renderDispatch()"></div></div>
+    <div class="card" style="padding:0;overflow:auto"><div id="dispBody"></div></div>
+  </section>
+
+  <!-- WARRANTY -->
+  <section class="view" id="view-warranty">
+    <div class="row"><h2 class="section">Warranty</h2></div>
+    <p class="lead">Warranty starts on the Tally invoice date entered at dispatch. Look up any mattress by serial (scan the label), customer or invoice.</p>
+    <nav class="tabs" style="margin:0 0 14px 0" id="warTabs">
+      <button data-w="lookup" class="active" onclick="showWar('lookup')">🔎 Lookup</button>
+      <button data-w="claims" onclick="showWar('claims')">🛠 Claims</button>
+    </nav>
+    <div class="warSub" id="warSub-lookup">
+      <div class="card"><input id="wlQ" placeholder="serial no, customer, invoice no or WO #" style="max-width:420px" oninput="renderLookup()"></div>
+      <div class="card" style="padding:0;overflow:auto"><div id="wlBody"></div></div>
+    </div>
+    <div class="warSub" id="warSub-claims" style="display:none">
+      <div class="card"><div class="row">
+        <input id="clF" placeholder="search claim, serial, customer, phone" style="max-width:320px" oninput="renderClaims()">
+        <select id="clS" style="max-width:220px" onchange="renderClaims()"><option value="active">Open / in progress</option><option value="">All</option>
+          <option value="replacement">Replacement approved</option><option value="service">Service / repair</option><option value="rejected">Rejected</option><option value="closed">Closed</option></select>
+        <span class="tag" id="clCount"></span>
+        <div class="spacer"></div><span class="hint">New claims are registered from Lookup → + Claim.</span></div></div>
+      <div class="card" style="padding:0;overflow:auto"><div id="clBody"></div></div>
+    </div>
+  </section>
   <!-- OTHERS (miscellaneous notes / log) -->
   <section class="view" id="view-others">
     <div class="row"><h2 class="section">Others</h2><div class="spacer noprint"></div>
@@ -537,6 +676,11 @@ function ensureDB(d){
   d.adminPin=d.adminPin||'1234';
   d.flagLog=d.flagLog||[];
   d.others=d.others||[];
+  d.woDocs=d.woDocs||[];
+  d.moves=d.moves||[]; d.serials=d.serials||[]; d.dispatches=d.dispatches||[]; d.claims=d.claims||[];
+  d.serialSeq=d.serialSeq||1; d.dispSeq=d.dispSeq||1; d.claimSeq=d.claimSeq||1;
+  if(d.settings&&d.settings.warrantyYears==null){d.settings.warrantyYears=10;d.settings.replaceYears=3;}
+  if(d.settings&&!d.settings.labelMode)d.settings.labelMode='roll';
   d.settings=d.settings||{flagWO:4,flagCut:20,flagQuilt:5};
   if(d.settings.flagWO==null)d.settings.flagWO=4;
   (d.products||[]).forEach(p=>{if(p.borderWidth==null)p.borderWidth=82;});
@@ -571,7 +715,7 @@ const COLLS=[
   ['products','products', o=>({id:o.id,data:o})],
   ['app_users','users', o=>({id:o.id,data:o})],
 ];
-function metaObj(){return {settings:DB.settings,woSeq:DB.woSeq,blockSeq:DB.blockSeq,cutSeq:DB.cutSeq,quiltSeq:DB.quiltSeq,adminPin:DB.adminPin,flagLog:DB.flagLog,others:DB.others};}
+function metaObj(){return {settings:DB.settings,woSeq:DB.woSeq,blockSeq:DB.blockSeq,cutSeq:DB.cutSeq,quiltSeq:DB.quiltSeq,adminPin:DB.adminPin,flagLog:DB.flagLog,others:DB.others,serialSeq:DB.serialSeq,dispSeq:DB.dispSeq,claimSeq:DB.claimSeq};}
 function setSync(t,cls){const c=document.getElementById('syncChip');if(c){c.textContent=t;c.style.color=cls||'';}}
 
 function uid(){return Math.random().toString(36).slice(2,10)+Date.now().toString(36).slice(-4)}
@@ -591,14 +735,14 @@ async function cloudLoad(){
   const empty=!o.data.length&&!c.data.length&&!qq.data.length&&!m.data.length&&!p.data.length&&!u.data.length&&!md;
   if(empty) return true;
   DB={orders:rows(o),cuts:rows(c),quiltJobs:rows(qq),materials:rows(m),products:rows(p),users:rows(u),
-    settings:md&&md.settings,woSeq:md&&md.woSeq,blockSeq:md&&md.blockSeq,cutSeq:md&&md.cutSeq,quiltSeq:md&&md.quiltSeq,adminPin:md&&md.adminPin,flagLog:md&&md.flagLog,others:md&&md.others};
+    settings:md&&md.settings,woSeq:md&&md.woSeq,blockSeq:md&&md.blockSeq,cutSeq:md&&md.cutSeq,quiltSeq:md&&md.quiltSeq,adminPin:md&&md.adminPin,flagLog:md&&md.flagLog,others:md&&md.others,serialSeq:md&&md.serialSeq,dispSeq:md&&md.dispSeq,claimSeq:md&&md.claimSeq};
   ensureDB(DB);
   try{localStorage.setItem("wo_db",JSON.stringify(DB));}catch(e){}
   return false;
 }
 function initSnap(){
   SNAP={};
-  COLLS.forEach(([table,key])=>{const mp={};(DB[key]||[]).forEach(x=>mp[x.id]=JSON.stringify(x));SNAP[table]=mp;});
+  activeColls().forEach(([table,key])=>{const mp={};(DB[key]||[]).forEach(x=>mp[x.id]=JSON.stringify(x));SNAP[table]=mp;});
   SNAP.meta=JSON.stringify(metaObj());
 }
 function scheduleCloudPush(){ dirty=true; setSync('● Saving…','var(--warn)'); if(!pushing)runPush(); }
@@ -610,8 +754,9 @@ async function runPush(){
 }
 async function cloudPushDiff(){
   const state=JSON.parse(JSON.stringify({orders:DB.orders,cuts:DB.cuts,quiltJobs:DB.quiltJobs,
-    materials:DB.materials,products:DB.products,users:DB.users,meta:metaObj()}));
-  for(const [table,key,build] of COLLS){
+    materials:DB.materials,products:DB.products,users:DB.users,meta:metaObj(),
+    moves:DB.moves,serials:DB.serials,dispatches:DB.dispatches,claims:DB.claims}));
+  for(const [table,key,build] of activeColls()){
     const arr=state[key]||[]; const curMap={}; arr.forEach(x=>curMap[x.id]=JSON.stringify(x));
     const snap=SNAP[table]||{};
     const ups=arr.filter(x=>curMap[x.id]!==snap[x.id]).map(build);
@@ -627,22 +772,25 @@ async function cloudPushAll(){ SNAP={}; await cloudPushDiff(); }
 function startPolling(){ setInterval(async()=>{
   if(!CLOUD_OK||pushing||dirty)return;
   if((document.getElementById('modal').style.display||'')==='flex')return;
-  try{ const empty=await cloudLoad(); if(!empty){ initSnap(); refreshView(); } }catch(e){}
+  try{ const empty=await cloudLoad(); await loadErp(); await loadDocs(); if(!empty){ initSnap(); refreshView(); } }catch(e){}
 }, 15000); }
 function refreshView(){
   if(!CURRENT_USER)return; const v=CURRENT_VIEW;
   if(v==='dash')renderDash(); else if(v==='wo')renderWO(); else if(v==='admin')renderAdmin();
   else if(v==='cutting')renderCutTab(); else if(v==='quilting')renderQuiltTab();
   else if(v==='others')renderOthers();
+  else if(v==='stores')renderStores(); else if(v==='dispatch')renderDispatch(); else if(v==='warranty')renderWarranty();
 }
 async function boot(){
   setSync('● Connecting…','var(--warn)');
   if(sb){
     try{
       const empty=await cloudLoad();
+      await loadErp();
       if(empty){ DB=ensureDB(sampleDB()); await cloudPushAll(); }
       else initSnap();
       CLOUD_OK=true; setSync('● Online','var(--accent2)');
+      await loadDocs();
     }catch(e){ console.error('cloud',e); CLOUD_OK=false; setSync('● Offline (this device only)','var(--danger)'); }
   } else { setSync('● Offline (no internet)','var(--danger)'); }
   if(!restoreSession()){ const li=document.getElementById('loginUser'); if(li)li.focus(); }
@@ -700,7 +848,9 @@ function go(v){
   if(v==='dash')renderDash(); if(v==='wo')renderWO(); if(v==='products')renderProducts();
   if(v==='admin')renderAdmin();
   if(v==='cutting')renderCutTab(); if(v==='quilting')renderQuiltTab();
-  if(v==='others')renderOthers(); window.scrollTo(0,0);}
+  if(v==='others')renderOthers();
+  if(v==='stores')renderStores(); if(v==='dispatch')renderDispatch(); if(v==='warranty')renderWarranty();
+  window.scrollTo(0,0);}
 /* ============================ LOGIN & ROLES ============================ */
 let CURRENT_USER=null, ADMIN_SUB='review';
 function doLogin(){
@@ -723,7 +873,7 @@ function restoreSession(){
 }
 function applyRole(){
   const admin=CURRENT_USER.role==='admin';
-  document.getElementById('userChip').textContent=CURRENT_USER.name+(admin?' · Admin':' · Operator');
+  document.getElementById('userChip').textContent=CURRENT_USER.name+(admin?' · Admin':CURRENT_USER.role==='office'?' · Office':' · Operator');
   document.querySelectorAll('#tabs button[data-role="admin"]').forEach(b=>b.style.display=admin?'':'none');
   go('dash');
 }
@@ -862,7 +1012,7 @@ function renderReview(){
 function renderUsers(){
   document.querySelector('#userTable tbody').innerHTML=DB.users.map(u=>`<tr>
     <td>${u.name}</td><td>${u.username}</td>
-    <td><span class="chip ${u.role==='admin'?'spring':'fabric'}">${u.role}</span></td>
+    <td><span class="chip ${u.role==='admin'?'spring':u.role==='office'?'adhesive':'fabric'}">${u.role}</span></td>
     <td>${'•'.repeat(String(u.pin).length)}</td>
     <td class="num noprint"><button class="btn ghost sm" onclick='editUser(${JSON.stringify(u.id)})'>Edit</button></td></tr>`).join('');
 }
@@ -876,6 +1026,7 @@ function editUser(id){
       <div><label class="f">PIN</label><input id="uPin" value="${u.pin}"></div>
       <div><label class="f">Role</label><select id="uRole">
         <option value="operator" ${u.role==='operator'?'selected':''}>Operator (Workorder, Cutting, Quilting)</option>
+        <option value="office" ${u.role==='office'?'selected':''}>Office (Operator + upload Invoices / Tally WO + Claude check)</option>
         <option value="admin" ${u.role==='admin'?'selected':''}>Admin (full access + flags)</option></select></div>
     </div>
     <div class="divider"></div>
@@ -901,12 +1052,16 @@ function renderSettings(){
   document.getElementById('setWO').value=DB.settings.flagWO;
   document.getElementById('setCut').value=DB.settings.flagCut;
   document.getElementById('setQuilt').value=DB.settings.flagQuilt;
+  document.getElementById('setWY').value=DB.settings.warrantyYears; document.getElementById('setRY').value=DB.settings.replaceYears;
+  document.getElementById('setLbl').value=DB.settings.labelMode||'roll';
 }
 function saveSettings(){
   DB.settings.flagWO=+document.getElementById('setWO').value||0;
   DB.settings.flagCut=+document.getElementById('setCut').value||0;
   DB.settings.flagQuilt=+document.getElementById('setQuilt').value||0;
-  save();alert("Tolerances saved.");renderReview();
+  DB.settings.warrantyYears=+document.getElementById('setWY').value||0; DB.settings.replaceYears=+document.getElementById('setRY').value||0;
+  DB.settings.labelMode=document.getElementById('setLbl').value;
+  save();alert("Settings saved.");renderReview();
 }
 document.getElementById('tabs').addEventListener('click',e=>{if(e.target.dataset.v)go(e.target.dataset.v)});
 
@@ -914,6 +1069,9 @@ document.getElementById('tabs').addEventListener('click',e=>{if(e.target.dataset
 function renderDash(){
   if(!CURRENT_USER){document.getElementById('dashBody').innerHTML='';return;}
   if(CURRENT_USER.role==='admin')renderAdminDash(); else renderUserDash();
+  const pd=prodDashHTML(); if(pd){const body=document.getElementById('dashBody'), lead=body.querySelector('p.lead');
+    let el=lead; while(el&&el.parentElement!==body)el=el.parentElement;
+    if(el)el.insertAdjacentHTML('afterend',pd); else body.insertAdjacentHTML('afterbegin',pd);}
 }
 function statusPill(t,c){return `<span class="pill ${c}">${t}</span>`;}
 // ---------- OPERATOR DASHBOARD: at-a-glance statuses, no flags ----------
@@ -1034,6 +1192,7 @@ function showWO(sub){
   document.querySelectorAll('.woSub').forEach(d=>d.style.display='none');
   document.getElementById('woSub-'+sub).style.display='block';
   if(sub==='create')initCreateWO(); if(sub==='all')renderWOAll();
+  if(sub==='prod')renderProduction(); if(sub==='inv')renderDocTab('invoice'); if(sub==='tally')renderDocTab('tally');
 }
 function initCreateWO(){
   // brand dropdown
@@ -1351,17 +1510,22 @@ function renderWOAll(){
     && (!fc || (o.cust||'').toLowerCase().includes(fc))
     && (!fm || (o.model||'').toLowerCase().includes(fm))).slice().reverse();
   document.getElementById('woCount').textContent=list.length+' of '+DB.orders.length;
-  document.getElementById('woAllList').innerHTML= list.length?`<table><thead><tr>
-    <th>WO #</th><th>Date</th><th>Brand · Model</th><th>Customer</th><th>City</th><th>Agent</th><th class="num">Size</th><th class="num">Qty</th><th class="noprint"></th>
+  document.getElementById('woAllList').innerHTML= list.length?`<table class="oneline"><thead><tr>
+    <th>WO #</th><th>Date</th><th>Customer</th><th>City</th><th>Agent</th><th>Brand · Model</th><th class="num">Size (in)</th><th class="num">Qty</th>
+    ${ERP_OK?'<th>Status</th>':''}${DOCS_OK?'<th>Invoice</th><th>Tally WO</th>':''}<th class="num noprint"></th>
     </tr></thead><tbody>`+list.map(o=>`<tr>
-      <td><b>${o.num}</b>${o.edited?' <span class="pill low">EDITED</span>':''}</td><td>${o.date||''}</td><td>${o.brand} · ${o.model}</td>
-      <td>${o.cust||'-'}</td><td>${o.city||'-'}</td><td>${o.agent||'-'}</td>
+      <td><b>${o.num}</b>${o.edited?' <span class="pill low" title="Edited">E</span>':''}</td><td>${o.date||''}</td>
+      <td class="ell" title="${escH(o.cust||'')}">${escH(o.cust||'-')}</td><td class="ell" title="${escH(o.city||'')}">${escH(o.city||'-')}</td>
+      <td class="ell" title="${escH(o.agent||'')}">${escH(o.agent||'-')}</td>
+      <td class="ell" title="${escH(o.brand+' · '+o.model)}">${escH(o.brand)} · ${escH(o.model)}</td>
       <td class="num">${o.L}×${o.W}×${o.H}</td><td class="num">${o.Q}</td>
-      <td class="num noprint">
+      ${ERP_OK?(p=>`<td><span class="pill ${p.cls}" title="made ${p.made}, dispatched ${p.disp} of ${p.Q}">${p.st}</span></td>`)(woProgress(o)):''}
+      ${DOCS_OK?`<td>${docStatusCell(o,'invoice')}</td><td>${docStatusCell(o,'tally')}</td>`:''}
+      <td class="num noprint acts">
         <button class="btn ghost sm" onclick='viewWO(${JSON.stringify(o.id)})'>View</button>
         <button class="btn ghost sm" onclick='docPDF("wo",${JSON.stringify(o.id)})'>PDF</button>
         <button class="btn ghost sm" onclick='editWO(${JSON.stringify(o.id)})'>Edit</button>
-        <button class="btn danger ghost sm" onclick='delWO(${JSON.stringify(o.id)})'>✕</button></td></tr>`).join('')
+        <button class="btn danger ghost sm" title="Delete" onclick='delWO(${JSON.stringify(o.id)})'>✕</button></td></tr>`).join('')
     +`</tbody></table>`:`<p class="muted small" style="padding:14px">No work orders in this range.</p>`;
 }
 function woSheetHTML(o){
@@ -1396,7 +1560,7 @@ function viewWO(id){const o=DB.orders.find(x=>x.id===id);
   openModal(`<div class="row"><b style="font-size:16px">Work Order ${o.num}</b><div class="spacer"></div>
     <button class="btn ghost sm" onclick='docPDF("wo",${JSON.stringify(id)})'>⬇ PDF</button>
     <button class="btn ghost sm" onclick="closeModal()">Close</button></div>
-    <div style="margin-top:12px">${woSheetHTML(o)}</div>`);
+    <div style="margin-top:12px">${woSheetHTML(o)}</div>${woDocsHTML(o)}`);
 }
 function downloadOnePDF(type){
   if(type==='wo'){
@@ -1575,7 +1739,9 @@ function commitMaterial(id){
   const o={name:v('mName').trim(),cat:v('mCat'),unit:v('mUnit'),cur:+v('mCur'),min:+v('mMin'),max:+v('mMax'),
     cont:+v('mCont'),sup:v('mSup').trim(),sheets:editSheets.filter(s=>s.l&&s.w&&s.t)};
   if(!o.name){alert("Material name required.");return;}
-  if(id){Object.assign(matById(id),o);}else{o.id=uid();DB.materials.push(o);}
+  if(id){const m=matById(id); const diff=+(o.cur-Number(m.cur||0)).toFixed(3); o.cur=Number(m.cur||0);
+    Object.assign(m,o); if(diff){ if(ERP_OK)postMove(m,'adjust',diff,{note:'Edited in Material Master'}); else m.cur=+(m.cur+diff).toFixed(3); }}
+  else{const start=o.cur; o.cur=0; o.id=uid(); DB.materials.push(o); if(start){ if(ERP_OK)postMove(o,'adjust',start,{note:'Opening stock'}); else o.cur=start; }}
   save();closeModal();renderMaterials();
 }
 function delMaterial(id){
@@ -1781,7 +1947,10 @@ function saveCutResult(id){
   if(wasResult)logEdit(c);
   // Feed fresh sheets back into the foam's stock + register sheet sizes
   const m=matById(c.mat);
-  if(m){ m.cur=+(Number(m.cur||0)+sheetsCFT).toFixed(3); m.sheets=m.sheets||[];
+  if(m){ const delta=+(sheetsCFT-Number(c.stockAdded||0)).toFixed(3);
+    if(ERP_OK) postMove(m,'cut-in',delta,{ref:c.no,note:'Fresh sheets from block cutting'+(c.stockAdded?' (re-recorded)':'')});
+    else m.cur=+(Number(m.cur||0)+delta).toFixed(3);
+    c.stockAdded=sheetsCFT; m.sheets=m.sheets||[];
     sheets.forEach(p=>{ if(!m.sheets.some(s=>s.l===c.L&&s.w===c.W&&s.t===p.thk)) m.sheets.push({l:c.L,w:c.W,t:p.thk}); }); }
   save();closeModal();renderCutTab();
   alert(`Cutting recorded. ${fmt(sheetsCFT,3)} CFT of fresh ${m?m.name:''} sheets added to stock.`);
@@ -2138,6 +2307,750 @@ async function bulkPDF(type){
 }
 
 /* ============================ INIT ============================ */
+/* =====================================================================================
+   ERP MODULES — Stores (inventory ledger), Production & serial numbers, Dispatch,
+   Warranty & claims, Production dashboard.
+   Data lives in 4 Supabase tables (stock_moves, fg_serials, dispatches, warranty_claims),
+   synced exactly like orders/cuttings. Until those tables exist the modules stay locked.
+   ===================================================================================== */
+const ERP_COLLS=[
+  ['stock_moves','moves', o=>({id:o.id,data:o})],
+  ['fg_serials','serials', o=>({id:o.id,data:o})],
+  ['dispatches','dispatches', o=>({id:o.id,data:o})],
+  ['warranty_claims','claims', o=>({id:o.id,data:o})],
+];
+let ERP_OK=false, ERP_CACHE=null;
+function activeColls(){return ERP_OK?COLLS.concat(ERP_COLLS):COLLS;}
+async function loadErp(){
+  if(!sb)return;
+  const res=await Promise.all(ERP_COLLS.map(([t])=>sb.from(t).select('data')));
+  if(res.some(r=>r.error)){
+    if(ERP_CACHE){ERP_COLLS.forEach(([,k])=>DB[k]=ERP_CACHE[k]);}   // transient error: keep what we had
+    else{ERP_OK=false; console.warn('ERP tables not set up yet', res.find(r=>r.error).error);}
+    return;
+  }
+  ERP_OK=true; ERP_CACHE={};
+  ERP_COLLS.forEach(([,k],i)=>{DB[k]=(res[i].data||[]).map(x=>x.data); ERP_CACHE[k]=DB[k];});
+  try{localStorage.setItem("wo_db",JSON.stringify(DB));}catch(e){}
+}
+function erpLocked(boxId){
+  if(ERP_OK)return false;
+  const b=document.getElementById(boxId);
+  if(b)b.innerHTML=`<div class="banner err" style="display:block">This module needs a one-time setup in Supabase. Run <b>erp_setup.sql</b> in Supabase → SQL Editor, then reload this page.</div>`;
+  return true;
+}
+function isAdmin(){return CURRENT_USER&&CURRENT_USER.role==='admin';}
+function nowISO(){return new Date().toISOString();}
+function addDays(d,n){const x=new Date(d+'T00:00:00Z');x.setUTCDate(x.getUTCDate()+n);return x.toISOString().slice(0,10);}
+function addYears(d,n){const x=new Date(d+'T00:00:00Z');x.setUTCFullYear(x.getUTCFullYear()+Number(n||0));x.setUTCDate(x.getUTCDate()-1);return x.toISOString().slice(0,10);}
+function monthKey(d){return (d||'').slice(0,7);}
+function seqRef(p,n,w){return p+String(n).padStart(w||4,'0');}
+function dmy(d){if(!d)return '-';const [y,m,dd]=d.split('-');return `${dd}-${m}-${y}`;}
+
+/* ============================ STORES / INVENTORY LEDGER ============================ */
+const MOVE_TYPES={receipt:{l:'Receipt',sign:1,c:'ok'},issue:{l:'Issue to WO',sign:-1,c:'low'},
+  return:{l:'Return to stores',sign:1,c:'ok'},adjust:{l:'Adjustment',sign:0,c:'pend'},'cut-in':{l:'Cutting → sheets',sign:1,c:'ok'}};
+// Every stock change goes through here: updates the material balance and writes a ledger line.
+function postMove(m,type,qty,extra){
+  qty=+Number(qty).toFixed(3); if(!m||!qty)return null;
+  m.cur=+(Number(m.cur||0)+qty).toFixed(3);
+  const mv=Object.assign({id:uid(),date:today(),type,matId:m.id,matName:m.name,unit:m.unit,qty,balance:m.cur,
+    by:CURRENT_USER?CURRENT_USER.name:'',at:nowISO()},extra||{});
+  DB.moves.push(mv); return mv;
+}
+function issuedFor(woId,matId){return DB.moves.filter(v=>v.woId===woId&&(!matId||v.matId===matId)&&(v.type==='issue'||v.type==='return'))
+  .reduce((s,v)=>s-v.qty,0);}
+function plannedQty(l){return l.entered?Number(l.actual||0):Number(l.recommended||0);}
+
+let STORE_SUB='stock';
+function renderStores(){showStore(STORE_SUB);}
+function showStore(sub){
+  STORE_SUB=sub;
+  document.querySelectorAll('#storeTabs button').forEach(b=>b.classList.toggle('active',b.dataset.s===sub));
+  document.querySelectorAll('.storeSub').forEach(d=>d.style.display='none');
+  document.getElementById('storeSub-'+sub).style.display='block';
+  document.getElementById('stAdjBtn').style.display=isAdmin()?'':'none';
+  if(sub==='stock')renderStock(); else renderLedger();
+}
+function stockStatus(m){
+  const c=Number(m.cur||0),mn=Number(m.min||0);
+  if(mn>0&&c<=mn)return ['crit','REORDER']; if(mn>0&&c<=mn*1.25)return ['low','LOW']; return ['ok','OK'];
+}
+function renderStock(){
+  if(erpLocked('stockBody'))return;
+  const f=(document.getElementById('stF').value||'').trim().toLowerCase(), fc=document.getElementById('stCat').value;
+  const cs=document.getElementById('stCat'); if(cs.options.length<=1)cs.innerHTML='<option value="">All categories</option>'+CATS.map(c=>`<option>${c}</option>`).join('');
+  const mk=monthKey(today());
+  const list=DB.materials.filter(m=>(!f||m.name.toLowerCase().includes(f))&&(!fc||m.cat===fc));
+  const low=DB.materials.filter(m=>stockStatus(m)[0]!=='ok');
+  document.getElementById('stLow').innerHTML=low.length?`<div class="banner err" style="display:block">⚠ ${low.length} material(s) at or near reorder level: ${low.map(m=>`<b>${escH(m.name)}</b> (${fmt(m.cur,2)} ${m.unit})`).join(', ')}</div>`:'';
+  document.getElementById('stockBody').innerHTML=`<table class="oneline"><thead><tr><th>Material</th><th>Category</th><th class="num">In stock</th><th>Unit</th>
+    <th class="num">Min</th><th class="num">In this month</th><th class="num">Out this month</th><th>Last movement</th><th>Status</th><th class="num"></th></tr></thead><tbody>`+
+    list.map(m=>{const mv=DB.moves.filter(v=>v.matId===m.id); const mm=mv.filter(v=>monthKey(v.date)===mk);
+      const inQ=mm.filter(v=>v.qty>0).reduce((s,v)=>s+v.qty,0), outQ=mm.filter(v=>v.qty<0).reduce((s,v)=>s-v.qty,0);
+      const last=mv[mv.length-1]; const [c,l]=stockStatus(m);
+      return `<tr><td class="ell" style="max-width:240px" title="${escH(m.name)}"><b>${escH(m.name)}</b></td><td><span class="chip ${m.cat.toLowerCase()}">${m.cat}</span></td>
+        <td class="num"><b>${fmt(m.cur,3)}</b></td><td>${m.unit}</td><td class="num">${m.min||'-'}</td>
+        <td class="num">${inQ?fmt(inQ,3):'-'}</td><td class="num">${outQ?fmt(outQ,3):'-'}</td>
+        <td class="muted small">${last?`${dmy(last.date)} · ${MOVE_TYPES[last.type].l}`:'-'}</td><td><span class="pill ${c}">${l}</span></td>
+        <td class="num acts"><button class="btn ghost sm" onclick='matLedger(${JSON.stringify(m.id)})'>Ledger</button></td></tr>`;}).join('')+`</tbody></table>`;
+}
+function matLedger(id){showStore('ledger');document.getElementById('lgMat').value=id;renderLedger();}
+function renderLedger(){
+  if(erpLocked('ledgerBody'))return;
+  const ms=document.getElementById('lgMat');
+  if(ms.options.length-1!==DB.materials.length){const cur=ms.value;
+    ms.innerHTML='<option value="">All materials</option>'+DB.materials.map(m=>`<option value="${m.id}">${escH(m.name)}</option>`).join(''); ms.value=cur;}
+  const fm=ms.value, ft=document.getElementById('lgType').value, fw=(document.getElementById('lgWO').value||'').trim().toLowerCase();
+  const from=document.getElementById('lgFrom').value, to=document.getElementById('lgTo').value;
+  const list=DB.moves.filter(v=>(!fm||v.matId===fm)&&(!ft||v.type===ft)&&(!fw||(v.woNum||'').toLowerCase().includes(fw)||(v.ref||'').toLowerCase().includes(fw))
+    &&inRange(v.date,from,to)).slice().reverse();
+  document.getElementById('lgCount').textContent=list.length+' movements';
+  document.getElementById('ledgerBody').innerHTML=list.length?`<table class="oneline"><thead><tr><th>Date</th><th>Type</th><th>Material</th>
+    <th class="num">Qty</th><th>Unit</th><th class="num">Balance</th><th>WO #</th><th>Ref / Party</th><th>Note</th><th>By</th></tr></thead><tbody>`+
+    list.slice(0,500).map(v=>`<tr><td>${dmy(v.date)}</td><td><span class="pill ${MOVE_TYPES[v.type].c}">${MOVE_TYPES[v.type].l}</span></td>
+      <td class="ell" style="max-width:220px" title="${escH(v.matName)}">${escH(v.matName)}</td>
+      <td class="num" style="color:${v.qty<0?'var(--danger)':'var(--accent2)'}"><b>${v.qty>0?'+':''}${fmt(v.qty,3)}</b></td><td>${v.unit}</td>
+      <td class="num">${fmt(v.balance,3)}</td><td>${escH(v.woNum||'-')}</td>
+      <td class="ell" title="${escH([v.ref,v.party].filter(Boolean).join(' · '))}">${escH([v.ref,v.party].filter(Boolean).join(' · ')||'-')}</td>
+      <td class="ell" title="${escH(v.note||'')}">${escH(v.note||'-')}</td><td class="muted small">${escH(v.by||'')}</td></tr>`).join('')+`</tbody></table>`
+    +(list.length>500?`<p class="hint" style="padding:8px 12px">Showing latest 500 — narrow the filter to see older.</p>`:'')
+    :`<p class="muted small" style="padding:14px">No stock movements match.</p>`;
+}
+function matOptions(sel){return DB.materials.map(m=>`<option value="${m.id}" ${m.id===sel?'selected':''}>${escH(m.name)} (${m.unit})</option>`).join('');}
+function receiveModal(){
+  if(!ERP_OK)return alert('Run erp_setup.sql in Supabase first.');
+  openModal(`<div class="row"><b style="font-size:16px">Receive stock (GRN)</b><div class="spacer"></div><button class="btn ghost sm" onclick="closeModal()">Cancel</button></div>
+    <div class="grid g2" style="margin-top:12px">
+      <div style="grid-column:1/-1"><label class="f">Material</label><select id="rvMat">${matOptions()}</select></div>
+      <div><label class="f">Quantity received</label><input id="rvQty" type="number" step="0.001"></div>
+      <div><label class="f">Date</label><input id="rvDate" type="date" value="${today()}"></div>
+      <div><label class="f">Supplier</label><input id="rvParty" list="dlSup" autocomplete="off"><datalist id="dlSup">${uniq(DB.materials.map(m=>m.sup).concat(DB.moves.map(v=>v.party))).map(s=>`<option value="${escH(s)}">`).join('')}</datalist></div>
+      <div><label class="f">Supplier invoice / DC no</label><input id="rvRef"></div>
+      <div style="grid-column:1/-1"><label class="f">Note</label><input id="rvNote" placeholder="optional"></div>
+    </div><div class="divider"></div>
+    <div class="row"><div class="spacer"></div><button class="btn g" onclick="commitReceive()">Add to stock</button></div>`);
+}
+function commitReceive(){
+  const m=matById(document.getElementById('rvMat').value), q=+document.getElementById('rvQty').value;
+  if(!m||!(q>0))return alert('Choose a material and enter a quantity above 0.');
+  postMove(m,'receipt',q,{date:document.getElementById('rvDate').value||today(),party:val('rvParty'),ref:val('rvRef'),note:val('rvNote')});
+  save();closeModal();renderStores();
+}
+function issueModal(woId){
+  if(!ERP_OK)return alert('Run erp_setup.sql in Supabase first.');
+  const opts=DB.orders.slice().reverse().map(o=>`<option value="${escH(o.num)}">${escH(o.num)} · ${escH(o.cust||'')} · ${escH(o.model)} × ${o.Q}</option>`).join('');
+  const pre=woId?(DB.orders.find(o=>o.id===woId)||{}).num:'';
+  openModal(`<div class="row"><b style="font-size:16px">Issue material to a work order</b><div class="spacer"></div><button class="btn ghost sm" onclick="closeModal()">Cancel</button></div>
+    <div class="grid g2" style="margin-top:12px">
+      <div><label class="f">Work order</label><input id="isWO" list="dlIsWO" value="${escH(pre||'')}" placeholder="WO number…" autocomplete="off" oninput="renderIssueLines()" onchange="renderIssueLines()"><datalist id="dlIsWO">${opts}</datalist></div>
+      <div><label class="f">Date</label><input id="isDate" type="date" value="${today()}"></div>
+    </div>
+    <div id="isLines" style="margin-top:12px"></div>
+    <div class="banner" id="isErr"></div><div class="divider"></div>
+    <div class="row"><span class="hint">Default = planned for the work order minus what was already issued. Change any number; leave 0 to skip.</span><div class="spacer"></div>
+      <button class="btn g" onclick="commitIssue()">Issue from stores</button></div>`);
+  renderIssueLines();
+}
+let ISSUE_EXTRA=[];
+function renderIssueLines(){
+  const box=document.getElementById('isLines'); if(!box)return;
+  const o=DB.orders.find(x=>String(x.num).toLowerCase()===(val('isWO')||'').toLowerCase());
+  if(!o){box.innerHTML='<p class="muted small">Pick a work order to load its material list.</p>';return;}
+  const lines=(o.lines||[]).filter(l=>l.matId&&matById(l.matId));
+  box.innerHTML=`<table class="oneline"><thead><tr><th>Material</th><th class="num">Planned</th><th class="num">Issued</th><th class="num">In stock</th><th class="num" style="width:130px">Issue now</th><th>Unit</th></tr></thead><tbody>`+
+    lines.map((l,i)=>{const m=matById(l.matId),p=plannedQty(l),done=issuedFor(o.id,l.matId),rem=Math.max(0,+(p-done).toFixed(3));
+      return `<tr><td class="ell" style="max-width:220px" title="${escH(m.name)}">${escH(m.name)}</td><td class="num">${fmt(p,3)}</td><td class="num">${done?fmt(done,3):'-'}</td>
+        <td class="num" style="color:${Number(m.cur)<rem?'var(--danger)':''}">${fmt(m.cur,3)}</td>
+        <td class="num"><input class="isQ" data-mat="${m.id}" type="number" step="0.001" value="${rem}" style="padding:5px 7px;text-align:right"></td><td>${m.unit}</td></tr>`;}).join('')+
+    `<tr><td><select class="isXMat" style="padding:5px 7px"><option value="">+ other material…</option>${matOptions()}</select></td><td></td><td></td><td></td>
+      <td class="num"><input class="isXQ" type="number" step="0.001" placeholder="0" style="padding:5px 7px;text-align:right"></td><td></td></tr></tbody></table>`;
+}
+function commitIssue(){
+  const err=t=>{const b=document.getElementById('isErr');b.className='banner err';b.textContent=t;};
+  const o=DB.orders.find(x=>String(x.num).toLowerCase()===(val('isWO')||'').toLowerCase());
+  if(!o)return err('Pick a work order from the list.');
+  const rows=[...document.querySelectorAll('.isQ')].map(i=>({m:matById(i.dataset.mat),q:+i.value||0}));
+  const xm=document.querySelector('.isXMat').value, xq=+document.querySelector('.isXQ').value||0;
+  if(xm&&xq)rows.push({m:matById(xm),q:xq});
+  const todo=rows.filter(r=>r.m&&r.q>0);
+  if(!todo.length)return err('Nothing to issue — enter a quantity above 0.');
+  const short=todo.filter(r=>r.q>Number(r.m.cur||0));
+  if(short.length&&!confirm('Stock will go below zero for:\n'+short.map(r=>`${r.m.name}: issuing ${fmt(r.q,3)}, in stock ${fmt(r.m.cur,3)}`).join('\n')+'\n\nIssue anyway?'))return;
+  const d=document.getElementById('isDate').value||today();
+  todo.forEach(r=>postMove(r.m,'issue',-r.q,{date:d,woId:o.id,woNum:o.num,party:o.cust}));
+  save();closeModal();
+  if(CURRENT_VIEW==='stores')renderStores(); else if(CURRENT_VIEW==='wo')renderWO();
+  alert(`Issued ${todo.length} material(s) to ${o.num}.`);
+}
+function adjustModal(){
+  if(!isAdmin())return;
+  openModal(`<div class="row"><b style="font-size:16px">Stock adjustment (physical count)</b><div class="spacer"></div><button class="btn ghost sm" onclick="closeModal()">Cancel</button></div>
+    <div class="grid g2" style="margin-top:12px">
+      <div style="grid-column:1/-1"><label class="f">Material</label><select id="adMat" onchange="document.getElementById('adSys').textContent=fmt((matById(this.value)||{}).cur,3)">${matOptions()}</select></div>
+      <div><label class="f">System stock</label><div id="adSys" style="padding:9px 0;font-weight:700">${fmt((DB.materials[0]||{}).cur,3)}</div></div>
+      <div><label class="f">Actual counted stock</label><input id="adQty" type="number" step="0.001"></div>
+      <div style="grid-column:1/-1"><label class="f">Reason (required)</label><input id="adNote" placeholder="e.g. monthly physical count, damaged, returned from WO-0012"></div>
+    </div><div class="divider"></div>
+    <div class="row"><div class="spacer"></div><button class="btn g" onclick="commitAdjust()">Save adjustment</button></div>`);
+}
+function commitAdjust(){
+  const m=matById(document.getElementById('adMat').value), raw=document.getElementById('adQty').value, note=val('adNote');
+  if(!m||raw==='')return alert('Enter the counted stock.'); if(!note)return alert('A reason is required for adjustments.');
+  const diff=+(Number(raw)-Number(m.cur||0)).toFixed(3); if(!diff){closeModal();return;}
+  postMove(m,'adjust',diff,{note}); save();closeModal();renderStores();
+}
+
+/* ============================ PRODUCTION & SERIAL NUMBERS ============================ */
+function serialsOf(woId){return DB.serials.filter(s=>s.woId===woId);}
+function woProgress(o){
+  const ss=serialsOf(o.id), made=ss.filter(s=>s.status!=='void').length, disp=ss.filter(s=>s.status==='dispatched').length;
+  const Q=Number(o.Q||0), issued=DB.moves.some(v=>v.woId===o.id&&v.type==='issue');
+  let st='Open',cls='pend';
+  if(made>0&&made<Q){st='In production';cls='low';}
+  else if(Q&&made>=Q&&!disp){st='Ready';cls='ok';}
+  else if(Q&&made>=Q&&disp<Q){st='Part dispatched';cls='low';}
+  if(Q&&disp>=Q){st='Dispatched';cls='ok';}
+  return {made,disp,Q,issued,st,cls,due:woDue(o)};
+}
+function woDue(o){const n=parseInt(String(o.delivery||'').replace(/[^0-9]/g,''));return (n>0&&o.date)?addDays(o.date,n):null;}
+function brandPrefix(b){const s=(b||'').trim().toUpperCase();
+  const known={NAPCAT:'NC',ORTHONAP:'ON'}; if(known[s])return known[s];
+  return (s.replace(/[^A-Z]/g,'')+'XX').slice(0,2);}
+function newSerial(o){
+  const d=today(); const n=DB.serialSeq++;
+  return `${brandPrefix(o.brand)}${d.slice(2,4)}${d.slice(5,7)}-${String(n).padStart(5,'0')}`;
+}
+function renderProduction(){
+  if(erpLocked('prodBody'))return;
+  const f=(document.getElementById('prF').value||'').trim().toLowerCase(), fs=document.getElementById('prS').value;
+  const rows=DB.orders.slice().reverse().map(o=>({o,p:woProgress(o)})).filter(({o,p})=>
+    (!f||[o.num,o.cust,o.model].join(' ').toLowerCase().includes(f)) &&
+    (!fs||(fs==='open'?['Open','In production'].includes(p.st):fs==='ready'?p.st==='Ready'||p.st==='Part dispatched':p.st==='Dispatched')));
+  const t=today();
+  document.getElementById('prCount').textContent=rows.length+' work orders';
+  document.getElementById('prodBody').innerHTML=rows.length?`<table class="oneline"><thead><tr><th>WO #</th><th>Date</th><th>Due</th><th>Customer</th><th>Model</th><th class="num">Size</th>
+    <th class="num">Qty</th><th>Materials</th><th>Made</th><th class="num">Dispatched</th><th>Status</th><th class="num"></th></tr></thead><tbody>`+
+    rows.map(({o,p})=>{const late=p.due&&p.due<t&&['Open','In production'].includes(p.st);
+      const pct=p.Q?Math.min(100,Math.round(p.made/p.Q*100)):0;
+      return `<tr><td><b>${escH(o.num)}</b></td><td>${dmy(o.date)}</td><td style="${late?'color:var(--danger);font-weight:700':''}">${p.due?dmy(p.due)+(late?' ⚠':''):'-'}</td>
+      <td class="ell" title="${escH(o.cust||'')}">${escH(o.cust||'-')}</td><td class="ell" title="${escH(o.brand+' · '+o.model)}">${escH(o.model)}</td>
+      <td class="num">${o.L}×${o.W}×${o.H}</td><td class="num">${o.Q}</td>
+      <td>${p.issued?'<span class="pill ok">Issued</span>':'<span class="pill pend">Not issued</span>'}</td>
+      <td><div style="display:flex;align-items:center;gap:6px"><div style="width:70px;height:7px;background:var(--line);border-radius:4px;overflow:hidden"><div style="width:${pct}%;height:100%;background:var(--accent2)"></div></div><span class="small">${p.made}/${p.Q}</span></div></td>
+      <td class="num">${p.disp||'-'}</td><td><span class="pill ${p.cls}">${p.st}</span></td>
+      <td class="num acts">
+        <button class="btn ghost sm" onclick='issueModal(${JSON.stringify(o.id)})'>Issue</button>
+        <button class="btn sm" ${p.made>=p.Q?'disabled':''} onclick='produceModal(${JSON.stringify(o.id)})'>+ Made</button>
+        <button class="btn ghost sm" ${p.made?'':'disabled'} onclick='serialsModal(${JSON.stringify(o.id)})'>Serials</button></td></tr>`;}).join('')+`</tbody></table>`
+    :`<p class="muted small" style="padding:14px">No work orders match.</p>`;
+}
+function produceModal(woId){
+  const o=DB.orders.find(x=>x.id===woId); const p=woProgress(o); const rem=Math.max(0,p.Q-p.made);
+  openModal(`<div class="row"><b style="font-size:16px">Record finished mattresses — ${escH(o.num)}</b><div class="spacer"></div><button class="btn ghost sm" onclick="closeModal()">Cancel</button></div>
+    <p class="tag" style="margin-top:6px">${escH(o.cust||'')} · ${escH(o.brand)} ${escH(o.model)} · ${o.L}×${o.W}×${o.H} · ordered ${o.Q}, made so far ${p.made}</p>
+    <div class="grid g2" style="margin-top:12px">
+      <div><label class="f">Quantity finished now</label><input id="pdQ" type="number" min="1" max="${rem}" value="${rem}"></div>
+      <div><label class="f">Date</label><input id="pdDate" type="date" value="${today()}"></div>
+    </div>
+    ${p.issued?'':'<div class="banner info" style="display:block;margin-top:10px">Materials have not been issued to this work order yet. You can still record production.</div>'}
+    <div class="divider"></div>
+    <div class="row"><label class="row small muted" style="gap:6px;cursor:pointer"><input type="checkbox" id="pdPrint" style="width:auto" checked> Print labels after saving</label>
+      <div class="spacer"></div><button class="btn g" onclick='commitProduce(${JSON.stringify(woId)})'>Create serial numbers</button></div>`);
+}
+function commitProduce(woId){
+  const o=DB.orders.find(x=>x.id===woId); const p=woProgress(o); const q=parseInt(document.getElementById('pdQ').value)||0;
+  if(q<1)return alert('Enter at least 1.');
+  if(p.made+q>p.Q&&!confirm(`This makes ${p.made+q} against an order of ${p.Q}. Continue?`))return;
+  const d=document.getElementById('pdDate').value||today(); const made=[];
+  for(let i=0;i<q;i++){const s={id:uid(),serial:newSerial(o),woId:o.id,woNum:o.num,brand:o.brand,model:o.model,L:o.L,W:o.W,H:o.H,
+    cust:o.cust,mfgDate:d,status:'stock',by:CURRENT_USER.name,at:nowISO()}; DB.serials.push(s); made.push(s);}
+  save(); const pr=document.getElementById('pdPrint').checked; closeModal(); renderProduction();
+  if(pr)printLabels(made.map(s=>s.id));
+}
+function serialsModal(woId){
+  const o=DB.orders.find(x=>x.id===woId); const ss=serialsOf(woId);
+  openModal(`<div class="row"><b style="font-size:16px">Serial numbers — ${escH(o.num)}</b><div class="spacer"></div>
+      <button class="btn sm" onclick='printLabels(${JSON.stringify(ss.map(s=>s.id))})'>🏷 Print all labels</button>
+      <button class="btn ghost sm" onclick="closeModal()">Close</button></div>
+    <div style="overflow:auto;margin-top:10px"><table class="oneline"><thead><tr><th>Serial</th><th>Made</th><th>Status</th><th>Dispatch</th><th>Invoice</th><th class="num"></th></tr></thead><tbody>
+    ${ss.map(s=>`<tr><td><b style="font-family:ui-monospace,monospace">${s.serial}</b></td><td>${dmy(s.mfgDate)}</td>
+      <td><span class="pill ${s.status==='dispatched'?'ok':s.status==='void'?'crit':'pend'}">${s.status==='stock'?'In factory':s.status}</span></td>
+      <td>${escH(s.dispNo||'-')}</td><td>${escH(s.invoiceNo||'-')}</td>
+      <td class="num acts"><button class="btn ghost sm" onclick='printLabels([${JSON.stringify(s.id)}])'>🏷</button>
+      ${s.status==='stock'&&isAdmin()?`<button class="btn danger ghost sm" title="Cancel this serial (made by mistake)" onclick='voidSerial(${JSON.stringify(s.id)})'>✕</button>`:''}</td></tr>`).join('')}
+    </tbody></table></div>`);
+}
+function voidSerial(id){const s=DB.serials.find(x=>x.id===id);
+  if(!confirm(`Cancel serial ${s.serial}? It stays in the records marked VOID.`))return;
+  s.status='void'; s.voidBy=CURRENT_USER.name; s.voidAt=nowISO(); save(); serialsModal(s.woId); renderProduction();}
+
+/* ---- Code 128-B barcode as SVG (readable by any USB/phone barcode scanner) ---- */
+const C128="11011001100110011011001100110011010010011000100100011001000100110010011001000100110001001000110010011001001000110010001001100010010010110011100100110111001001100111010111001100100111011001001110011011001110010110010111001100100111011011100100110011101001110110111011101001100111001011001110010011011101100100111001101001110011001011011011000110110001101100011011010100011000100010110001000100011010110001000100011010001000110001011010001000110001010001100010001010110111000101100011101000110111010111011000101110001101000111011011101110110110100011101100010111011011101000110111000101101110111011101011000111010001101110001011011101101000111011000101110001101011101111010110010000101111000101010100110000101000011001001011000010010000110100001011001000010011010110010000101100001001001101000010011000010100001101001000011001011000010010110010100001111011101011000010100100011110101010011110010010111100100100111101011110010010011110100100111100101111010010011110010100111100100101101101111011011110110111101101101010111100010100011110100010111101011110100010111100010111101010001111010001010111011110101111011101110101111011110101110110100001001101001000011010011100";
+function code128SVG(text,h){
+  const codes=[]; for(let i=0;i<C128.length;i+=11)codes.push(C128.substr(i,11));
+  const vals=[...String(text)].map(ch=>{const v=ch.charCodeAt(0)-32;return (v>=0&&v<95)?v:0;});
+  let sum=104; vals.forEach((v,i)=>sum+=v*(i+1));
+  const bits=codes[104]+vals.map(v=>codes[v]).join('')+codes[sum%103]+'1100011101011';
+  let x=10,rects=''; const W=bits.length+20;
+  for(let i=0;i<bits.length;){if(bits[i]==='1'){let j=i;while(bits[j]==='1')j++;rects+=`<rect x="${x+i}" y="0" width="${j-i}" height="${h}"/>`;i=j;}else i++;}
+  return `<svg viewBox="0 0 ${W} ${h}" preserveAspectRatio="none" style="width:100%;height:100%" xmlns="http://www.w3.org/2000/svg"><rect width="${W}" height="${h}" fill="#fff"/><g fill="#000">${rects}</g></svg>`;
+}
+function labelHTML(s){
+  return `<div class="lbl"><div class="lbl-top"><div><div class="lbl-brand">${escH((s.brand||'').toUpperCase())}</div><div class="lbl-model">${escH(s.model||'')}</div></div>
+    <div style="text-align:right"><div class="lbl-k">SIZE (inch)</div><div class="lbl-size">${s.L} × ${s.W} × ${s.H}</div></div></div>
+    <div class="lbl-bar">${code128SVG(s.serial,60)}</div>
+    <div class="lbl-bot"><span class="lbl-serial">${s.serial}</span><span>MFG ${(s.mfgDate||'').slice(5,7)}/${(s.mfgDate||'').slice(0,4)} · ${escH(s.woNum||'')}</span></div></div>`;
+}
+function printLabels(ids){
+  const ss=ids.map(id=>DB.serials.find(s=>s.id===id)).filter(Boolean); if(!ss.length)return;
+  const mode=DB.settings.labelMode||'roll';
+  const css=mode==='a4'
+    ?`@page{size:A4;margin:8mm} .lbls{display:grid;grid-template-columns:repeat(2,95mm);gap:4mm 6mm} .lbl{width:95mm;height:52mm}`
+    :`@page{size:100mm 50mm;margin:0} .lbl{width:100mm;height:50mm;page-break-after:always}`;
+  document.getElementById('printArea').innerHTML=`<style id="lblStyle">${css}
+    .lbl{box-sizing:border-box;padding:3mm 4mm;font-family:Arial,Helvetica,sans-serif;display:flex;flex-direction:column;justify-content:space-between;overflow:hidden;border:${mode==='a4'?'0.3mm dashed #999':'none'}}
+    .lbl-top{display:flex;justify-content:space-between;align-items:flex-start}.lbl-brand{font-size:14pt;font-weight:800;letter-spacing:.5pt}
+    .lbl-model{font-size:10pt;font-weight:700}.lbl-k{font-size:6pt}.lbl-size{font-size:12pt;font-weight:800}
+    .lbl-bar{height:15mm}.lbl-bot{display:flex;justify-content:space-between;font-size:7pt;align-items:baseline}
+    .lbl-serial{font-family:'Courier New',monospace;font-size:12pt;font-weight:800;letter-spacing:.5pt}</style>
+    <div class="lbls">${ss.map(labelHTML).join('')}</div>`;
+  setTimeout(()=>{window.print();},50);
+}
+
+/* ============================ DISPATCH ============================ */
+function renderDispatch(){
+  if(erpLocked('dispBody'))return;
+  document.getElementById('dpNew').style.display=canDocs()?'':'none';
+  const f=(document.getElementById('dpF').value||'').trim().toLowerCase();
+  const from=document.getElementById('dpFrom').value,to=document.getElementById('dpTo').value;
+  const list=DB.dispatches.filter(d=>inRange(d.date,from,to)&&(!f||[d.no,d.cust,d.invoiceNo,d.vehicle,(d.woNums||[]).join(' ')].join(' ').toLowerCase().includes(f))).slice().reverse();
+  const ready=DB.serials.filter(s=>s.status==='stock').length;
+  document.getElementById('dpReady').textContent=`${ready} finished mattress(es) in factory, ready to dispatch`;
+  document.getElementById('dispBody').innerHTML=list.length?`<table class="oneline"><thead><tr><th>Dispatch #</th><th>Date</th><th>Customer</th><th>City</th><th>WO #</th>
+    <th class="num">Pcs</th><th>Invoice</th><th>Inv. date</th><th>Vehicle</th><th>Transporter / LR</th><th class="num"></th></tr></thead><tbody>`+
+    list.map(d=>`<tr><td><b>${escH(d.no)}</b></td><td>${dmy(d.date)}</td><td class="ell" title="${escH(d.cust)}">${escH(d.cust||'-')}</td><td class="ell">${escH(d.city||'-')}</td>
+      <td class="ell" title="${escH((d.woNums||[]).join(', '))}">${escH((d.woNums||[]).join(', '))}</td><td class="num">${(d.serialIds||[]).length}</td>
+      <td>${escH(d.invoiceNo||'-')}</td><td>${dmy(d.invoiceDate)}</td><td>${escH(d.vehicle||'-')}</td>
+      <td class="ell" title="${escH([d.transporter,d.lr].filter(Boolean).join(' · '))}">${escH([d.transporter,d.lr].filter(Boolean).join(' · ')||'-')}</td>
+      <td class="num acts"><button class="btn ghost sm" onclick='printDispatch(${JSON.stringify(d.id)})'>🖨 Slip</button>
+        ${canDocs()?`<button class="btn ghost sm" onclick='dispatchModal(${JSON.stringify(d.id)})'>Edit</button>`:''}</td></tr>`).join('')+`</tbody></table>`
+    :`<p class="muted small" style="padding:14px">No dispatches yet.</p>`;
+}
+let DP_SEL=new Set();
+function dispatchModal(id){
+  if(!ERP_OK)return alert('Run erp_setup.sql in Supabase first.');
+  const d=id?DB.dispatches.find(x=>x.id===id):{date:today(),cust:'',city:'',invoiceNo:'',invoiceDate:'',vehicle:'',transporter:'',lr:'',note:'',serialIds:[],
+    wYears:DB.settings.warrantyYears||10,rYears:DB.settings.replaceYears||3};
+  DP_SEL=new Set(d.serialIds||[]);
+  openModal(`<div class="row"><b style="font-size:16px">${id?'Edit dispatch '+escH(d.no):'New dispatch'}</b><div class="spacer"></div><button class="btn ghost sm" onclick="closeModal()">Cancel</button></div>
+    <div class="grid g3" style="margin-top:12px">
+      <div><label class="f">Dispatch date</label><input id="dpDate" type="date" value="${d.date}"></div>
+      <div><label class="f">Customer</label><input id="dpCust" value="${escH(d.cust)}" list="dlCust2" autocomplete="off" oninput="renderDpPick()"><datalist id="dlCust2">${uniq(DB.orders.map(o=>o.cust)).map(c=>`<option value="${escH(c)}">`).join('')}</datalist></div>
+      <div><label class="f">City</label><input id="dpCity" value="${escH(d.city)}"></div>
+      <div><label class="f">Tally invoice no</label><input id="dpInv" value="${escH(d.invoiceNo)}"></div>
+      <div><label class="f">Invoice date (warranty starts)</label><input id="dpInvD" type="date" value="${d.invoiceDate||''}"></div>
+      <div><label class="f">Vehicle no</label><input id="dpVeh" value="${escH(d.vehicle)}" placeholder="TN 33 AB 1234"></div>
+      <div><label class="f">Transporter</label><input id="dpTr" value="${escH(d.transporter)}"></div>
+      <div><label class="f">LR / Docket no</label><input id="dpLR" value="${escH(d.lr)}"></div>
+      <div><label class="f">Warranty (years) · replacement (years)</label><div class="row" style="flex-wrap:nowrap"><input id="dpWY" type="number" value="${d.wYears}" style="width:50%"><input id="dpRY" type="number" value="${d.rYears}" style="width:50%"></div></div>
+    </div>
+    <div class="divider"></div>
+    <div class="row"><b>Mattresses in this dispatch</b><span class="tag" id="dpSelCount"></span><div class="spacer"></div>
+      <input id="dpScan" placeholder="scan or type serial + Enter" style="max-width:240px" onkeydown="if(event.key==='Enter'){dpScan(this.value);this.value='';}"></div>
+    <div id="dpPick" style="margin-top:8px;max-height:320px;overflow:auto"></div>
+    <div style="margin-top:8px"><label class="f">Note</label><input id="dpNote" value="${escH(d.note||'')}"></div>
+    <div class="banner" id="dpErr"></div><div class="divider"></div>
+    <div class="row"><div class="spacer"></div><button class="btn g" onclick='commitDispatch(${JSON.stringify(id||null)})'>Save dispatch</button></div>`);
+  window.__dpEditing=id||null; renderDpPick();
+}
+function renderDpPick(){
+  const box=document.getElementById('dpPick'); if(!box)return;
+  const cust=(val('dpCust')||'').toLowerCase();
+  const pool=DB.serials.filter(s=>DP_SEL.has(s.id)||(s.status==='stock'&&(!cust||(s.cust||'').toLowerCase().includes(cust))));
+  const byWO={}; pool.forEach(s=>(byWO[s.woNum]=byWO[s.woNum]||[]).push(s));
+  document.getElementById('dpSelCount').textContent=DP_SEL.size+' selected';
+  box.innerHTML=Object.keys(byWO).length?Object.entries(byWO).map(([wo,ss])=>`<div class="lncard" style="padding:8px 10px">
+      <div class="row"><b>${escH(wo)}</b><span class="tag">${escH(ss[0].cust||'')} · ${escH(ss[0].model)} ${ss[0].L}×${ss[0].W}×${ss[0].H}</span><div class="spacer"></div>
+        <button class="btn ghost sm" onclick='dpToggleWO(${JSON.stringify(wo)})'>Select all</button></div>
+      <div class="row" style="margin-top:6px;gap:6px">${ss.map(s=>`<label class="chip" style="cursor:pointer;${DP_SEL.has(s.id)?'background:#dcf6e8;color:#0f8a5c':''}">
+        <input type="checkbox" style="width:auto;margin-right:4px" ${DP_SEL.has(s.id)?'checked':''} onchange='dpTog(${JSON.stringify(s.id)},this.checked)'>${s.serial}</label>`).join('')}</div></div>`).join('')
+    :`<p class="muted small">No finished mattresses waiting${cust?' for this customer':''}. Record production first (Workorder → Production).</p>`;
+}
+function dpTog(id,on){on?DP_SEL.add(id):DP_SEL.delete(id);renderDpPick();}
+function dpToggleWO(wo){const ss=DB.serials.filter(s=>s.woNum===wo&&(s.status==='stock'||DP_SEL.has(s.id)));
+  const all=ss.every(s=>DP_SEL.has(s.id)); ss.forEach(s=>all?DP_SEL.delete(s.id):DP_SEL.add(s.id)); renderDpPick();}
+function dpScan(v){const s=DB.serials.find(x=>x.serial.toLowerCase()===String(v).trim().toLowerCase());
+  if(!s)return alert('Serial not found: '+v);
+  if(s.status!=='stock'&&!DP_SEL.has(s.id))return alert(`${s.serial} is already ${s.status}${s.dispNo?' ('+s.dispNo+')':''}.`);
+  DP_SEL.add(s.id); if(!val('dpCust'))document.getElementById('dpCust').value=s.cust||''; renderDpPick();}
+function commitDispatch(id){
+  const err=t=>{const b=document.getElementById('dpErr');b.className='banner err';b.textContent=t;};
+  if(!DP_SEL.size)return err('Select at least one mattress.');
+  if(!val('dpCust'))return err('Customer is required.');
+  const d=id?DB.dispatches.find(x=>x.id===id):{id:uid(),no:seqRef('DSP-',DB.dispSeq++),by:CURRENT_USER.name,at:nowISO()};
+  const before=new Set(d.serialIds||[]);
+  Object.assign(d,{date:document.getElementById('dpDate').value||today(),cust:val('dpCust'),city:val('dpCity'),invoiceNo:val('dpInv'),
+    invoiceDate:document.getElementById('dpInvD').value,vehicle:val('dpVeh'),transporter:val('dpTr'),lr:val('dpLR'),note:val('dpNote'),
+    wYears:+document.getElementById('dpWY').value||0,rYears:+document.getElementById('dpRY').value||0,serialIds:[...DP_SEL]});
+  d.woNums=uniq(d.serialIds.map(sid=>(DB.serials.find(s=>s.id===sid)||{}).woNum));
+  before.forEach(sid=>{if(!DP_SEL.has(sid)){const s=DB.serials.find(x=>x.id===sid); if(s){s.status='stock';['dispatchId','dispNo','dispDate','invoiceNo','invoiceDate','wYears','rYears'].forEach(k=>delete s[k]);}}});
+  d.serialIds.forEach(sid=>{const s=DB.serials.find(x=>x.id===sid); if(s)Object.assign(s,{status:'dispatched',dispatchId:d.id,dispNo:d.no,dispDate:d.date,
+    invoiceNo:d.invoiceNo,invoiceDate:d.invoiceDate,wYears:d.wYears,rYears:d.rYears});});
+  if(!id)DB.dispatches.push(d); else logEdit(d);
+  save();closeModal();renderDispatch();
+  if(!d.invoiceDate)alert(`${d.no} saved. Add the Tally invoice date later — warranty starts from it (until then the dispatch date is used).`);
+}
+function printDispatch(id){
+  const d=DB.dispatches.find(x=>x.id===id); const ss=d.serialIds.map(sid=>DB.serials.find(s=>s.id===sid)).filter(Boolean);
+  document.getElementById('printArea').innerHTML=`<style>@page{size:A4;margin:12mm}</style><div class="wo-sheet">
+    <div class="h"><div><div class="t">DISPATCH SLIP</div><div class="tag">Napcat &amp; Orthonap</div></div><div style="text-align:right"><div class="tag">DISPATCH #</div><div class="t">${escH(d.no)}</div></div></div>
+    <div class="meta"><div><div class="lbl">Customer</div><div class="val">${escH(d.cust)}</div></div><div><div class="lbl">City</div><div class="val">${escH(d.city||'-')}</div></div>
+      <div><div class="lbl">Date</div><div class="val">${dmy(d.date)}</div></div><div style="border-right:none"><div class="lbl">Invoice</div><div class="val">${escH(d.invoiceNo||'-')} ${d.invoiceDate?'· '+dmy(d.invoiceDate):''}</div></div>
+      <div><div class="lbl">Vehicle</div><div class="val">${escH(d.vehicle||'-')}</div></div><div><div class="lbl">Transporter</div><div class="val">${escH(d.transporter||'-')}</div></div>
+      <div><div class="lbl">LR / Docket</div><div class="val">${escH(d.lr||'-')}</div></div><div style="border-right:none"><div class="lbl">Pieces</div><div class="val">${ss.length}</div></div></div>
+    <table><thead><tr><th>#</th><th>Serial</th><th>WO #</th><th>Product</th><th>Size (in)</th></tr></thead><tbody>
+    ${ss.map((s,i)=>`<tr><td>${i+1}</td><td><b>${s.serial}</b></td><td>${escH(s.woNum)}</td><td>${escH(s.brand)} ${escH(s.model)}</td><td>${s.L}×${s.W}×${s.H}</td></tr>`).join('')}</tbody></table>
+    <div style="padding:12px 14px" class="tag">Warranty ${d.wYears} years (${d.rYears} years replacement) from invoice date. ${escH(d.note||'')}</div>
+    <div style="display:flex;justify-content:space-between;padding:28px 14px 12px"><span>Prepared by: ${escH(d.by||'')}</span><span>Driver signature</span><span>Received by</span></div></div>`;
+  setTimeout(()=>window.print(),50);
+}
+
+/* ============================ WARRANTY & CLAIMS ============================ */
+function warrantyInfo(s,onDate){
+  if(!s||s.status!=='dispatched')return {state:'notsold',label:'Not sold yet',cls:'pend'};
+  const start=s.invoiceDate||s.dispDate; const repEnd=addYears(start,s.rYears||0), end=addYears(start,s.wYears||0); const t=onDate||today();
+  if(t<=repEnd&&s.rYears)return {state:'replacement',label:'Replacement period',cls:'ok',start,repEnd,end};
+  if(t<=end)return {state:'service',label:'Service period',cls:'low',start,repEnd,end};
+  return {state:'expired',label:'Expired',cls:'crit',start,repEnd,end};
+}
+const CLAIM_ST={open:['Open','pend'],inspected:['Inspected','low'],replacement:['Replacement approved','ok'],service:['Service / repair','ok'],
+  rejected:['Rejected','crit'],closed:['Closed','ok']};
+let WAR_SUB='lookup';
+function renderWarranty(){showWar(WAR_SUB);}
+function showWar(sub){WAR_SUB=sub;
+  document.querySelectorAll('#warTabs button').forEach(b=>b.classList.toggle('active',b.dataset.w===sub));
+  document.querySelectorAll('.warSub').forEach(d=>d.style.display='none');
+  document.getElementById('warSub-'+sub).style.display='block';
+  if(sub==='lookup')renderLookup(); else renderClaims();}
+function renderLookup(){
+  if(erpLocked('wlBody'))return;
+  const q=(document.getElementById('wlQ').value||'').trim().toLowerCase();
+  if(q.length<3){document.getElementById('wlBody').innerHTML='<p class="muted small" style="padding:14px">Type at least 3 characters of a serial number, customer, invoice or WO number — or scan the label barcode.</p>';return;}
+  const list=DB.serials.filter(s=>[s.serial,s.cust,s.invoiceNo,s.woNum,s.dispNo].join(' ').toLowerCase().includes(q)).slice(0,200);
+  document.getElementById('wlBody').innerHTML=list.length?`<table class="oneline"><thead><tr><th>Serial</th><th>Product</th><th class="num">Size</th><th>Customer</th><th>Made</th>
+    <th>Invoice</th><th>Warranty from</th><th>Replacement till</th><th>Warranty till</th><th>Status</th><th>Claims</th><th class="num"></th></tr></thead><tbody>`+
+    list.map(s=>{const w=warrantyInfo(s);const cl=DB.claims.filter(c=>c.serialId===s.id);
+      return `<tr><td><b style="font-family:ui-monospace,monospace">${s.serial}</b></td><td class="ell">${escH(s.brand)} ${escH(s.model)}</td><td class="num">${s.L}×${s.W}×${s.H}</td>
+      <td class="ell" title="${escH(s.cust||'')}">${escH(s.cust||'-')}</td><td>${dmy(s.mfgDate)}</td><td>${escH(s.invoiceNo||'-')}</td>
+      <td>${dmy(w.start)}</td><td>${dmy(w.repEnd)}</td><td>${dmy(w.end)}</td><td><span class="pill ${w.cls}">${w.label}</span></td>
+      <td>${cl.length?cl.map(c=>`<span class="pill ${CLAIM_ST[c.status][1]}">${c.no}</span>`).join(' '):'-'}</td>
+      <td class="num acts">${canDocs()&&s.status==='dispatched'?`<button class="btn sm" onclick='claimModal(null,${JSON.stringify(s.id)})'>+ Claim</button>`:''}</td></tr>`;}).join('')+`</tbody></table>`
+    :`<p class="muted small" style="padding:14px">Nothing found for "${escH(q)}".</p>`;
+}
+function renderClaims(){
+  if(erpLocked('clBody'))return;
+  const f=(document.getElementById('clF').value||'').trim().toLowerCase(), fs=document.getElementById('clS').value;
+  const list=DB.claims.filter(c=>(!fs||(fs==='active'?!['rejected','closed'].includes(c.status):c.status===fs))&&
+    (!f||[c.no,c.serial,c.cust,c.phone,c.complaint].join(' ').toLowerCase().includes(f))).slice().reverse();
+  document.getElementById('clCount').textContent=list.length+' claims';
+  document.getElementById('clBody').innerHTML=list.length?`<table class="oneline"><thead><tr><th>Claim #</th><th>Date</th><th>Serial</th><th>Customer</th><th>Phone</th>
+    <th>Complaint</th><th>Coverage on claim date</th><th>Status</th><th>Replacement</th><th class="num"></th></tr></thead><tbody>`+
+    list.map(c=>{const cov={replacement:['Replacement','ok'],service:['Service only','low'],expired:['Out of warranty','crit'],notsold:['Not sold','crit']}[c.coverage]||['-','pend'];
+      return `<tr><td><b>${c.no}</b></td><td>${dmy(c.date)}</td><td style="font-family:ui-monospace,monospace">${c.serial}</td>
+      <td class="ell" title="${escH(c.cust||'')}">${escH(c.cust||'-')}</td><td>${escH(c.phone||'-')}</td><td class="ell" style="max-width:220px" title="${escH(c.complaint||'')}">${escH(c.complaint||'-')}</td>
+      <td><span class="pill ${cov[1]}">${cov[0]}</span></td><td><span class="pill ${CLAIM_ST[c.status][1]}">${CLAIM_ST[c.status][0]}</span></td>
+      <td style="font-family:ui-monospace,monospace">${escH(c.replSerial||'-')}</td>
+      <td class="num acts">${canDocs()?`<button class="btn ghost sm" onclick='claimModal(${JSON.stringify(c.id)})'>Open</button>`:''}</td></tr>`;}).join('')+`</tbody></table>`
+    :`<p class="muted small" style="padding:14px">No claims.</p>`;
+}
+function claimModal(id,serialId){
+  const c=id?DB.claims.find(x=>x.id===id):{date:today(),serialId,status:'open',complaint:'',phone:'',resolution:'',replSerial:''};
+  const s=DB.serials.find(x=>x.id===c.serialId); const w=warrantyInfo(s,c.date);
+  const spare=DB.serials.filter(x=>x.status==='stock'&&x.model===s.model&&x.L===s.L&&x.W===s.W&&x.H===s.H);
+  openModal(`<div class="row"><b style="font-size:16px">${id?'Claim '+c.no:'New warranty claim'}</b><div class="spacer"></div><button class="btn ghost sm" onclick="closeModal()">Cancel</button></div>
+    <div class="tag" style="margin-top:6px">Serial <b>${s.serial}</b> · ${escH(s.brand)} ${escH(s.model)} ${s.L}×${s.W}×${s.H} · ${escH(s.cust||'')} · Invoice ${escH(s.invoiceNo||'-')} ${s.invoiceDate?dmy(s.invoiceDate):''}</div>
+    <div class="row" style="margin-top:8px"><span class="pill ${w.cls}">${w.label}</span><span class="small muted">Warranty from ${dmy(w.start)} · replacement till ${dmy(w.repEnd)} · warranty till ${dmy(w.end)}</span></div>
+    <div class="grid g3" style="margin-top:12px">
+      <div><label class="f">Claim date</label><input id="clDate" type="date" value="${c.date}"></div>
+      <div><label class="f">Customer phone</label><input id="clPhone" value="${escH(c.phone)}"></div>
+      <div><label class="f">Status</label><select id="clSt">${Object.entries(CLAIM_ST).map(([k,v])=>`<option value="${k}" ${k===c.status?'selected':''}>${v[0]}</option>`).join('')}</select></div>
+      <div style="grid-column:1/-1"><label class="f">Complaint</label><textarea id="clComp" rows="2" placeholder="e.g. sagging in the middle, spring noise, fabric torn">${escH(c.complaint)}</textarea></div>
+      <div style="grid-column:1/-1"><label class="f">Inspection / resolution notes</label><textarea id="clRes" rows="2">${escH(c.resolution)}</textarea></div>
+      <div style="grid-column:1/-1"><label class="f">Replacement mattress (if replaced)</label><select id="clRepl"><option value="">— none —</option>
+        ${spare.concat(c.replSerialId?[DB.serials.find(x=>x.id===c.replSerialId)].filter(Boolean):[]).map(x=>`<option value="${x.id}" ${x.id===c.replSerialId?'selected':''}>${x.serial} (${escH(x.woNum)})</option>`).join('')}</select>
+        <div class="hint">Shows finished mattresses in the factory with the same model and size. The replacement inherits the original warranty dates.</div></div>
+    </div><div class="divider"></div>
+    <div class="row"><div class="spacer"></div><button class="btn g" onclick='commitClaim(${JSON.stringify(id||null)},${JSON.stringify(c.serialId)})'>Save claim</button></div>`);
+}
+function commitClaim(id,serialId){
+  const s=DB.serials.find(x=>x.id===serialId);
+  const comp=(document.getElementById('clComp').value||'').trim(); if(!comp)return alert('Describe the complaint.');
+  const c=id?DB.claims.find(x=>x.id===id):{id:uid(),no:seqRef('CLM-',DB.claimSeq++),serialId,serial:s.serial,cust:s.cust,by:CURRENT_USER.name,at:nowISO(),log:[]};
+  const st=document.getElementById('clSt').value;
+  if(id&&st!==c.status)c.log.push({at:nowISO(),by:CURRENT_USER.name,from:c.status,to:st});
+  Object.assign(c,{date:document.getElementById('clDate').value||today(),phone:val('clPhone'),status:st,complaint:comp,resolution:document.getElementById('clRes').value.trim()});
+  c.coverage=warrantyInfo(s,c.date).state;
+  const rid=document.getElementById('clRepl').value;
+  if(rid!==(c.replSerialId||'')){
+    if(c.replSerialId){const old=DB.serials.find(x=>x.id===c.replSerialId); if(old&&old.replacesId===s.id){old.status='stock';['replacesId','dispatchId','dispNo','dispDate','invoiceNo','invoiceDate','wYears','rYears'].forEach(k=>delete old[k]);}}
+    if(rid){const r=DB.serials.find(x=>x.id===rid);
+      Object.assign(r,{status:'dispatched',replacesId:s.id,cust:s.cust,dispNo:c.no,dispDate:c.date,invoiceNo:s.invoiceNo,invoiceDate:s.invoiceDate||s.dispDate,wYears:s.wYears,rYears:s.rYears});
+      s.replacedBy=r.serial; c.replSerial=r.serial;}
+    else{delete s.replacedBy; c.replSerial='';}
+    c.replSerialId=rid||'';
+  }
+  if(!id)DB.claims.push(c); save();closeModal();
+  if(CURRENT_VIEW==='warranty')renderWarranty();
+}
+
+/* ============================ PRODUCTION DASHBOARD ============================ */
+function prodDashHTML(){
+  if(!ERP_OK)return '';
+  const t=today(), mk=monthKey(t);
+  const prog=DB.orders.map(o=>({o,p:woProgress(o)}));
+  const open=prog.filter(x=>['Open','In production'].includes(x.p.st));
+  const late=open.filter(x=>x.p.due&&x.p.due<t);
+  const madeToday=DB.serials.filter(s=>s.status!=='void'&&s.mfgDate===t).length;
+  const madeMonth=DB.serials.filter(s=>s.status!=='void'&&monthKey(s.mfgDate)===mk).length;
+  const dispMonth=DB.serials.filter(s=>s.status==='dispatched'&&monthKey(s.dispDate)===mk).length;
+  const waiting=DB.serials.filter(s=>s.status==='stock').length;
+  const low=DB.materials.filter(m=>stockStatus(m)[0]!=='ok').length;
+  const openClaims=DB.claims.filter(c=>!['rejected','closed'].includes(c.status)).length;
+  // material planned vs issued for this month's work orders
+  const mos=DB.orders.filter(o=>monthKey(o.date)===mk), agg={};
+  mos.forEach(o=>(o.lines||[]).forEach(l=>{if(!l.matId)return;const a=agg[l.matId]=agg[l.matId]||{p:0,i:0};a.p+=plannedQty(l);}));
+  DB.moves.filter(v=>(v.type==='issue'||v.type==='return')&&mos.some(o=>o.id===v.woId)).forEach(v=>{const a=agg[v.matId]=agg[v.matId]||{p:0,i:0};a.i-=v.qty;});
+  const mat=Object.entries(agg).map(([id,a])=>({m:matById(id),...a})).filter(x=>x.m&&(x.p||x.i)).sort((a,b)=>b.p-a.p).slice(0,12);
+  const k=(v,l,c)=>`<div class="kpi"><div class="v" style="${c?'color:'+c:''}">${v}</div><div class="l">${l}</div></div>`;
+  return `<div class="card" style="margin-top:4px"><div class="row"><b>🏭 Production</b><span class="tag">${dmy(t)}</span><div class="spacer"></div>
+      <button class="btn ghost sm" onclick="go('wo');showWO('prod')">Open production</button></div>
+    <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(130px,1fr));margin-top:10px">
+      ${k(madeToday,'Made today')}${k(madeMonth,'Made this month')}${k(dispMonth,'Dispatched this month')}${k(waiting,'Ready, not dispatched')}
+      ${k(open.length,'Open work orders')}${k(late.length,'Delayed orders',late.length?'var(--danger)':'')}${k(low,'Materials low',low?'var(--warn)':'')}${k(openClaims,'Open warranty claims',openClaims?'var(--warn)':'')}
+    </div>
+    ${late.length?`<div style="margin-top:12px;overflow:auto"><b class="small">Delayed work orders</b><table class="oneline" style="margin-top:4px"><thead><tr><th>WO #</th><th>Customer</th><th>Model</th><th class="num">Qty</th><th>Due</th><th class="num">Days late</th><th>Made</th></tr></thead><tbody>
+      ${late.sort((a,b)=>a.p.due.localeCompare(b.p.due)).slice(0,10).map(({o,p})=>`<tr style="cursor:pointer" onclick='viewWO(${JSON.stringify(o.id)})'><td><b>${escH(o.num)}</b></td><td class="ell">${escH(o.cust||'-')}</td><td class="ell">${escH(o.model)}</td><td class="num">${o.Q}</td>
+        <td style="color:var(--danger)">${dmy(p.due)}</td><td class="num">${Math.round((new Date(t)-new Date(p.due))/864e5)}</td><td>${p.made}/${p.Q}</td></tr>`).join('')}</tbody></table></div>`:''}
+    ${mat.length?`<div style="margin-top:12px;overflow:auto"><b class="small">Material for this month's work orders — planned vs issued</b><table class="oneline" style="margin-top:4px"><thead><tr><th>Material</th><th class="num">Planned</th><th class="num">Issued</th><th class="num">Difference</th><th>Unit</th><th></th></tr></thead><tbody>
+      ${mat.map(x=>{const d=x.i-x.p,pc=x.p?d/x.p*100:0;const c=!x.i?['pend','Not issued']:Math.abs(pc)<=2?['ok','On plan']:pc>0?['crit','Over by '+fmt(pc,1)+'%']:['low','Under by '+fmt(-pc,1)+'%'];
+        return `<tr><td class="ell" style="max-width:240px">${escH(x.m.name)}</td><td class="num">${fmt(x.p,3)}</td><td class="num">${fmt(x.i,3)}</td><td class="num">${Math.abs(d)<0.0005?'0':(d>0?'+':'')+fmt(d,3)}</td><td>${x.m.unit}</td><td><span class="pill ${c[0]}">${c[1]}</span></td></tr>`;}).join('')}</tbody></table></div>`:''}
+  </div>`;
+}
+
+/* ============================ INVOICES & TALLY WO (PDF documents) ============================ */
+// Each uploaded PDF is one row in table `wo_docs`; the file itself lives in Storage bucket `wo-docs`.
+const DOC_BUCKET='wo-docs';
+const DOC_KINDS={invoice:{label:'Invoice',plural:'Invoices',noLabel:'Invoice No'},
+                 tally:{label:'Tally WO',plural:'Tally Work Orders',noLabel:'Tally WO No'}};
+let DOCS_OK=false, DOC_BUSY={};
+function canDocs(){return !!CURRENT_USER&&(CURRENT_USER.role==='admin'||CURRENT_USER.role==='office');}
+function escH(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function docsFor(woId,kind){return (DB.woDocs||[]).filter(d=>d.woId===woId&&(!kind||d.kind===kind));}
+function woById(id){return DB.orders.find(o=>o.id===id);}
+
+async function loadDocs(){
+  if(!sb)return;
+  const r=await sb.from('wo_docs').select('data');
+  if(r.error){DOCS_OK=false;console.warn('wo_docs not set up yet',r.error);return;}
+  DOCS_OK=true; DB.woDocs=(r.data||[]).map(x=>x.data).sort((a,b)=>(a.at||'').localeCompare(b.at||''));
+}
+async function pushDoc(d){
+  const{error}=await sb.from('wo_docs').upsert({id:d.id,wo_id:d.woId,kind:d.kind,data:d});
+  if(error)throw error;
+}
+
+/* ---- status summary used in the work-order list ---- */
+function docStatus(woId,kind){
+  const ds=docsFor(woId,kind);
+  if(!ds.length)return {cls:'none',txt:'—',tip:'Nothing uploaded'};
+  const bad=ds.filter(d=>d.check&&d.check.verdict==='mismatch').length;
+  const unclear=ds.filter(d=>d.check&&d.check.verdict==='unclear').length;
+  const pending=ds.filter(d=>!d.check).length;
+  const n=ds.length;
+  if(bad)return {cls:'crit',txt:`⚠ ${bad} of ${n}`,tip:bad+' with differences'};
+  if(unclear)return {cls:'low',txt:`? ${n}`,tip:'Claude could not decide on '+unclear};
+  if(pending)return {cls:'pend',txt:`${n} · not checked`,tip:pending+' not checked by Claude yet'};
+  return {cls:'ok',txt:`✓ ${n}`,tip:'All checked — match'};
+}
+function docStatusCell(o,kind){
+  const s=docStatus(o.id,kind);
+  if(s.cls==='none')return `<span class="muted">—</span>`;
+  return `<span class="pill ${s.cls}" title="${escH(s.tip)}" style="cursor:pointer" onclick='openDocTab("${kind}",${JSON.stringify(o.num)})'>${s.txt}</span>`;
+}
+function verdictPill(d){
+  if(DOC_BUSY[d.id])return `<span class="pill pend">Checking…</span>`;
+  if(!d.check)return `<span class="pill pend">Not checked</span>`;
+  const v=d.check.verdict;
+  if(v==='match')return `<span class="pill ok">✓ Matches</span>`;
+  if(v==='mismatch')return `<span class="pill crit">⚠ Differences</span>`;
+  return `<span class="pill low">? Unclear</span>`;
+}
+function openDocTab(kind,woNum){
+  showWO(kind==='invoice'?'inv':'tally');
+  const f=document.getElementById('docF-'+kind); if(f){f.value=woNum||'';renderDocTab(kind);}
+}
+
+/* ---- Invoice / Tally WO tab ---- */
+function renderDocTab(kind){
+  const K=DOC_KINDS[kind];
+  const box=document.getElementById('docBody-'+kind);
+  if(!box)return;
+  const upBtn=document.getElementById('docUp-'+kind); if(upBtn)upBtn.style.display=canDocs()?'':'none';
+  const setup=document.getElementById('docSetup-'+kind);
+  if(setup)setup.style.display=DOCS_OK?'none':'block';
+  const q=(document.getElementById('docF-'+kind).value||'').trim().toLowerCase();
+  const st=document.getElementById('docS-'+kind).value;
+  let list=(DB.woDocs||[]).filter(d=>d.kind===kind).slice().reverse();
+  list=list.filter(d=>{
+    const o=woById(d.woId)||{};
+    const hay=[d.woNum,o.cust,o.model,d.docNo].join(' ').toLowerCase();
+    if(q&&!hay.includes(q))return false;
+    if(st==='pending'&&d.check)return false;
+    if(st==='match'&&!(d.check&&d.check.verdict==='match'))return false;
+    if(st==='issue'&&!(d.check&&d.check.verdict!=='match'))return false;
+    return true;
+  });
+  document.getElementById('docCount-'+kind).textContent=list.length+' of '+(DB.woDocs||[]).filter(d=>d.kind===kind).length;
+  const canRun=canDocs();
+  box.innerHTML=list.length?`<table class="oneline"><thead><tr>
+      <th>WO #</th><th>Customer</th><th>Model</th><th class="num">Size</th><th class="num">Qty</th>
+      <th>${K.noLabel}</th><th>Date</th><th>Uploaded</th><th>Claude check</th><th class="num"></th></tr></thead><tbody>`+
+    list.map(d=>{const o=woById(d.woId);
+      return `<tr>
+        <td><b>${escH(d.woNum)}</b></td>
+        <td class="ell" title="${escH(o?o.cust:'')}">${escH(o?o.cust||'-':'(deleted WO)')}</td>
+        <td class="ell" title="${escH(o?o.brand+' · '+o.model:'')}">${escH(o?o.model:'-')}</td>
+        <td class="num">${o?`${o.L}×${o.W}×${o.H}`:'-'}</td><td class="num">${o?o.Q:'-'}</td>
+        <td><b>${escH(d.docNo||'-')}</b></td><td>${escH(d.docDate||'-')}</td>
+        <td class="muted small" title="${escH(d.fileName||'')}">${escH(d.by||'')} · ${escH((d.at||'').slice(0,10))}</td>
+        <td>${d.check?`<span style="cursor:pointer" onclick='showCheck(${JSON.stringify(d.id)})'>${verdictPill(d)}</span>`:verdictPill(d)}</td>
+        <td class="num acts">
+          <button class="btn ghost sm" title="Open PDF" onclick='openDocFile(${JSON.stringify(d.id)})'>📄 PDF</button>
+          ${canRun?`<button class="btn sm" title="Ask Claude to compare this PDF with the work order" ${DOC_BUSY[d.id]?'disabled':''} onclick='runCheck(${JSON.stringify(d.id)})'>🤖 ${d.check?'Re-check':'Check'}</button>`:''}
+          ${d.check?`<button class="btn ghost sm" onclick='showCheck(${JSON.stringify(d.id)})'>Result</button>`:''}
+          ${canRun?`<button class="btn danger ghost sm" title="Delete" onclick='delDoc(${JSON.stringify(d.id)})'>✕</button>`:''}
+        </td></tr>`;}).join('')+`</tbody></table>`
+    :`<p class="muted small" style="padding:14px">${DOCS_OK?'No '+K.plural.toLowerCase()+' uploaded yet.':'Online document storage is not set up yet.'}</p>`;
+}
+
+function uploadDocModal(kind,woId){
+  if(!canDocs()){alert('Only admin and office users can upload.');return;}
+  if(!DOCS_OK){alert('Document storage is not set up yet in Supabase. See the setup guide.');return;}
+  const K=DOC_KINDS[kind];
+  const opts=DB.orders.slice().reverse().map(o=>`<option value="${escH(o.num)}">${escH(o.num)} · ${escH(o.cust||'')} · ${escH(o.model)} ${o.L}×${o.W}×${o.H} × ${o.Q}</option>`).join('');
+  const pre=woId?(woById(woId)||{}).num:'';
+  openModal(`<div class="row"><b style="font-size:16px">Upload ${K.label} (PDF)</b><div class="spacer"></div>
+      <button class="btn ghost sm" onclick="closeModal()">Cancel</button></div>
+    <div class="grid g2" style="margin-top:12px">
+      <div style="grid-column:1/-1"><label class="f">Against work order</label>
+        <input id="dWO" list="dlWOnum" value="${escH(pre||'')}" placeholder="type WO number or customer…" autocomplete="off">
+        <datalist id="dlWOnum">${opts}</datalist></div>
+      <div><label class="f">${K.noLabel}</label><input id="dNo" placeholder="${kind==='invoice'?'e.g. NC/245/26-27':'e.g. TWO-118'}"></div>
+      <div><label class="f">${K.label} date</label><input id="dDate" type="date" value="${today()}"></div>
+      <div style="grid-column:1/-1"><label class="f">PDF file (max 10 MB)</label><input id="dFile" type="file" accept="application/pdf,.pdf"></div>
+    </div>
+    <div class="banner" id="dErr"></div>
+    <div class="divider"></div>
+    <div class="row"><label class="row small muted" style="gap:6px;cursor:pointer"><input type="checkbox" id="dAuto" style="width:auto" checked> Check with Claude right after upload</label>
+      <div class="spacer"></div><button class="btn g" id="dSave" onclick='commitDoc("${kind}")'>Upload</button></div>`);
+}
+async function commitDoc(kind){
+  const err=m=>{const b=document.getElementById('dErr');b.className='banner err';b.textContent=m;};
+  const woTxt=document.getElementById('dWO').value.trim();
+  const o=DB.orders.find(x=>String(x.num).toLowerCase()===woTxt.toLowerCase());
+  if(!o)return err('Pick a work order from the list.');
+  const docNo=document.getElementById('dNo').value.trim();
+  if(!docNo)return err(DOC_KINDS[kind].noLabel+' is required.');
+  const f=document.getElementById('dFile').files[0];
+  if(!f)return err('Choose the PDF file.');
+  if(!/\.pdf$/i.test(f.name)&&f.type!=='application/pdf')return err('Only PDF files are allowed.');
+  if(f.size>10*1024*1024)return err('File is larger than 10 MB.');
+  const btn=document.getElementById('dSave'); btn.disabled=true; btn.textContent='Uploading…';
+  const id=uid();
+  const path=`${kind}/${o.id}/${id}.pdf`;
+  try{
+    const up=await sb.storage.from(DOC_BUCKET).upload(path,f,{contentType:'application/pdf',upsert:false});
+    if(up.error)throw up.error;
+    const d={id,woId:o.id,woNum:o.num,kind,docNo,docDate:document.getElementById('dDate').value,
+      path,fileName:f.name,size:f.size,by:CURRENT_USER.name,at:new Date().toISOString(),check:null};
+    await pushDoc(d);
+    DB.woDocs.push(d);
+    const auto=document.getElementById('dAuto').checked;
+    closeModal(); renderDocTab(kind);
+    if(auto)runCheck(id);
+  }catch(e){console.error(e);btn.disabled=false;btn.textContent='Upload';err('Upload failed: '+(e.message||e));}
+}
+async function openDocFile(id){
+  const d=(DB.woDocs||[]).find(x=>x.id===id); if(!d)return;
+  const w=window.open('','_blank');
+  const r=await sb.storage.from(DOC_BUCKET).createSignedUrl(d.path,600);
+  if(r.error){if(w)w.close();alert('Could not open file: '+r.error.message);return;}
+  if(w)w.location=r.data.signedUrl; else location.href=r.data.signedUrl;
+}
+async function delDoc(id){
+  const d=(DB.woDocs||[]).find(x=>x.id===id); if(!d)return;
+  if(!confirm(`Delete ${DOC_KINDS[d.kind].label} ${d.docNo} for ${d.woNum}?`))return;
+  try{
+    const r=await sb.from('wo_docs').delete().eq('id',id); if(r.error)throw r.error;
+    await sb.storage.from(DOC_BUCKET).remove([d.path]);
+    DB.woDocs=DB.woDocs.filter(x=>x.id!==id); renderDocTab(d.kind);
+  }catch(e){alert('Delete failed: '+(e.message||e));}
+}
+
+/* ---- Claude check (runs in the Supabase Edge Function `check-doc`) ---- */
+async function runCheck(id){
+  const d=(DB.woDocs||[]).find(x=>x.id===id); if(!d||DOC_BUSY[id])return;
+  DOC_BUSY[id]=true; renderDocTab(d.kind);
+  try{
+    const r=await sb.functions.invoke('check-doc',{body:{docId:id,by:CURRENT_USER?CURRENT_USER.name:''}});
+    if(r.error){
+      let msg=r.error.message||String(r.error);
+      try{const j=await r.error.context.json(); if(j&&j.error)msg=j.error;}catch(_){}
+      throw new Error(msg);
+    }
+    if(!r.data||r.data.error)throw new Error((r.data&&r.data.error)||'Empty reply');
+    const cur=(DB.woDocs||[]).find(x=>x.id===id)||d; cur.check=r.data; d.check=r.data;
+  }catch(e){
+    console.error(e);
+    alert('Claude check could not run:\n\n'+(e.message||e)+
+      '\n\nIf this is the first time, make sure the check-doc function and the ANTHROPIC_API_KEY secret are set up in Supabase.');
+  }finally{ delete DOC_BUSY[id]; renderDocTab(d.kind); if(CURRENT_VIEW==='wo'&&WO_SUB==='all')renderWOAll(); }
+  if(d.check&&document.getElementById('modal').style.display!=='flex')showCheck(id);
+}
+function showCheck(id){
+  const d=(DB.woDocs||[]).find(x=>x.id===id); if(!d||!d.check)return;
+  const c=d.check, o=woById(d.woId)||{}, K=DOC_KINDS[d.kind];
+  const rowCls={ok:'ok',mismatch:'crit',missing:'crit',info:'pend'};
+  const rowTxt={ok:'✓ OK',mismatch:'✗ Different',missing:'✗ Missing',info:'Info'};
+  openModal(`<div class="row"><b style="font-size:16px">Claude check — ${K.label} ${escH(d.docNo)} vs ${escH(d.woNum)}</b><div class="spacer"></div>
+      <button class="btn ghost sm" onclick='openDocFile(${JSON.stringify(d.id)})'>📄 PDF</button>
+      <button class="btn ghost sm" onclick='viewWO(${JSON.stringify(d.woId)})'>Work order</button>
+      <button class="btn ghost sm" onclick="closeModal()">Close</button></div>
+    <div style="margin-top:12px" class="row">${verdictPill(d)}<span class="small">${escH(c.summary||'')}</span></div>
+    <div class="tag" style="margin-top:6px">${escH(o.cust||'')} · ${escH(o.brand||'')} ${escH(o.model||'')} · ${o.L}×${o.W}×${o.H} · Qty ${o.Q}
+      ${c.document&&c.document.party?` · PDF party: ${escH(c.document.party)}`:''}${c.document&&c.document.total_amount?` · Amount: ${escH(c.document.total_amount)}`:''}</div>
+    <div style="overflow:auto;margin-top:10px"><table class="oneline"><thead><tr><th>Item</th><th>Work order</th><th>${K.label} PDF</th><th>Result</th><th>Note</th></tr></thead><tbody>
+      ${(c.checks||[]).map(x=>`<tr><td><b>${escH(x.item)}</b></td><td>${escH(x.work_order)}</td><td>${escH(x.document)}</td>
+        <td><span class="pill ${rowCls[x.status]||'pend'}">${rowTxt[x.status]||escH(x.status)}</span></td><td class="small wrap">${escH(x.note||'')}</td></tr>`).join('')}
+    </tbody></table></div>
+    <div class="hint" style="margin-top:10px">Checked by Claude (${escH(c.model||'')}) on ${escH((c.at||'').replace('T',' ').slice(0,16))}${c.by?' · run by '+escH(c.by):''}. AI can make mistakes — open the PDF to confirm before acting.</div>`);
+}
+
+/* ---- documents block inside "View work order" ---- */
+function woDocsHTML(o){
+  if(!DOCS_OK)return '';
+  const part=kind=>{const K=DOC_KINDS[kind];const ds=docsFor(o.id,kind);
+    return `<div style="margin-top:12px"><div class="row"><b>${K.plural}</b><span class="tag">${ds.length}</span><div class="spacer"></div>
+      ${canDocs()?`<button class="btn ghost sm" onclick='uploadDocModal("${kind}",${JSON.stringify(o.id)})'>＋ Upload ${K.label}</button>`:''}</div>
+      ${ds.length?`<table class="oneline" style="margin-top:6px"><tbody>${ds.map(d=>`<tr>
+        <td><b>${escH(d.docNo)}</b></td><td>${escH(d.docDate||'')}</td><td>${d.check?`<span style="cursor:pointer" onclick='showCheck(${JSON.stringify(d.id)})'>${verdictPill(d)}</span>`:verdictPill(d)}</td>
+        <td class="num"><button class="btn ghost sm" onclick='openDocFile(${JSON.stringify(d.id)})'>📄 PDF</button>
+        ${canDocs()?`<button class="btn sm" onclick='closeModal();runCheck(${JSON.stringify(d.id)})'>🤖 Check</button>`:''}</td></tr>`).join('')}</tbody></table>`
+      :`<div class="muted small">None uploaded.</div>`}</div>`;};
+  return `<div class="divider"></div>${part('invoice')}${part('tally')}`;
+}
+
 boot();
 </script>
 </body>
