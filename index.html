@@ -410,6 +410,7 @@
     <nav class="tabs" style="margin-bottom:14px" id="cutTabs">
       <button data-c="create" class="active" onclick="showCut('create')">＋ Create Cutting</button>
       <button data-c="all" onclick="showCut('all')">📋 View / Edit Cuttings</button>
+      <button data-c="tally" onclick="showCut('tally')">📑 Tally Cutting</button>
     </nav>
     <div class="cutSub" id="cutSub-create">
       <div class="row"><h2 class="section" style="font-size:16px">Foam Block Cutting</h2><div class="spacer noprint"></div>
@@ -429,6 +430,27 @@
         <button class="btn sm" onclick="bulkPDF('cut')">⬇ PDF zip (range)</button>
       </div></div>
       <div class="card" style="padding:0;overflow:auto"><div id="cutAllList"></div></div>
+    </div>
+    <!-- Tally cutting orders -->
+    <div class="cutSub" id="cutSub-tally" style="display:none">
+      <div class="card">
+        <div class="row">
+          <b>Tally cutting orders</b><span class="tag" id="docCount-tallycut"></span><div class="spacer"></div>
+          <button class="btn sm" id="docAll-tallycut" onclick="checkAllDocs('tallycut')" style="display:none"></button>
+          <button class="btn g sm" id="docUp-tallycut" onclick="uploadDocModal('tallycut')">＋ Upload Tally Cutting PDF</button>
+        </div>
+        <div class="hint">Cutting / stock journal entered in Tally. Upload the PDF and Claude compares it with the cutting order in this app — grade, blocks, sheets and contingent.</div>
+        <div class="row" style="margin-top:10px">
+          <input id="docF-tallycut" placeholder="search cut #, grade, supplier or voucher no" style="max-width:300px" oninput="renderDocTab('tallycut')">
+          <select id="docS-tallycut" style="max-width:210px" onchange="renderDocTab('tallycut')">
+            <option value="">All</option><option value="pending">Not checked yet</option>
+            <option value="issue">Differences / unclear (to review)</option><option value="match">OK (matches + accepted)</option><option value="accepted">Accepted by admin</option></select>
+          <button class="btn ghost sm" onclick="document.getElementById('docF-tallycut').value='';document.getElementById('docS-tallycut').value='';renderDocTab('tallycut')">Clear</button>
+        </div>
+        <div class="banner info" id="docBulk-tallycut" style="display:none;margin-top:10px"></div>
+        <div class="banner err" id="docSetup-tallycut" style="display:none">Online document storage is not set up yet. Run the SQL from the setup guide in Supabase once, then reload.</div>
+      </div>
+      <div class="card" style="padding:0;overflow:auto"><div id="docBody-tallycut"></div></div>
     </div>
   </section>
 
@@ -1816,20 +1838,21 @@ function showCut(sub){
   document.querySelectorAll('#cutTabs button').forEach(b=>b.classList.toggle('active',b.dataset.c===sub));
   document.querySelectorAll('.cutSub').forEach(d=>d.style.display='none');
   document.getElementById('cutSub-'+sub).style.display='block';
-  if(sub==='create')renderCutting(); if(sub==='all')renderCutAll();
+  if(sub==='create')renderCutting(); if(sub==='all')renderCutAll(); if(sub==='tally')renderDocTab('tallycut');
 }
 function renderCutAll(){
   const from=document.getElementById('cutFrom').value,to=document.getElementById('cutTo').value;
   const list=DB.cuts.filter(c=>inRange(c.date||'',from,to)).slice().reverse();
   document.getElementById('cutCount').textContent=list.length+' of '+DB.cuts.length;
   document.getElementById('cutAllList').innerHTML= list.length?`<table><thead><tr>
-    <th>Cut #</th><th>Date</th><th>Grade</th><th class="num">Block size × blocks</th><th>Supplier</th><th>Invoice</th><th class="num">Block CFT</th><th class="num">Sheets CFT</th><th class="num">Contingent CFT</th><th class="num">Yield</th><th>Status</th><th class="noprint"></th>
+    <th>Cut #</th><th>Date</th><th>Grade</th><th class="num">Block size × blocks</th><th>Supplier</th><th>Invoice</th><th class="num">Block CFT</th><th class="num">Sheets CFT</th><th class="num">Contingent CFT</th><th class="num">Yield</th><th>Status</th>${DOCS_OK?'<th>Tally</th>':''}<th class="noprint"></th>
     </tr></thead><tbody>`+list.map(c=>{
       const out=c.result?c.result.sheetsCFT:0;const yld=c.result&&c.result.blockCFT?100*out/c.result.blockCFT:0;
       return `<tr><td><b>${c.no}</b>${c.edited?' <span class="pill low">EDITED</span>':''}</td><td>${c.date||''}</td><td>${cutGradeName(c)}</td>
       <td class="num">${cutSizeQ(c)}</td><td>${c.supplier||'-'}</td><td>${c.invoiceNo||'-'}</td>
       <td class="num">${fmt(blockCFT(c),2)}</td><td class="num">${c.result?fmt(out,2):'—'}</td><td class="num">${c.result?fmt(cutCont(c),3):'—'}</td><td class="num">${c.result?fmt(yld,1)+'%':'—'}</td>
       <td><span class="pill ${c.status==='completed'?'ok':'low'}">${c.status==='completed'?'DONE':'ISSUED'}</span></td>
+      ${DOCS_OK?`<td>${docStatusCell(c,'tallycut')}</td>`:''}
       <td class="num noprint">
         <button class="btn ghost sm" onclick='viewCut(${JSON.stringify(c.id)})'>View</button>
         <button class="btn ghost sm" onclick='docPDF("cut",${JSON.stringify(c.id)})'>PDF</button>
@@ -1838,20 +1861,35 @@ function renderCutAll(){
         ${delBtn('cut',c)}</td></tr>`;}).join('')
     +`</tbody></table>`:`<p class="muted small" style="padding:14px">No cutting orders in this range.</p>`;
 }
-function delCut(id){const c=DB.cuts.find(x=>x.id===id); if(!c)return;
+async function delCut(id){const c=DB.cuts.find(x=>x.id===id); if(!c)return;
   if(!delAllowed(c,'Cutting order '+c.no))return;
   const added=Number(c.stockAdded||0), m=matById(c.mat);
   const cA=Number(c.contAdded||0);
-  if(!confirm(`Delete cutting order ${c.no} completely?${added&&m?`\n\n• ${fmt(added,3)} CFT of ${m.name} sheets will be removed from stock`:''}${cA?`\n• ${fmt(cA,3)} CFT contingent foam will be removed from stock`:''}\n\nThis cannot be undone.`))return;
+  if(!confirm(`Delete cutting order ${c.no} completely?${added&&m?`\n\n• ${fmt(added,3)} CFT of ${m.name} sheets will be removed from stock`:''}${cA?`\n• ${fmt(cA,3)} CFT contingent foam will be removed from stock`:''}${docsFor(c.id,'tallycut').length?`\n• ${docsFor(c.id,'tallycut').length} Tally cutting PDF(s) deleted`:''}\n\nThis cannot be undone.`))return;
   if(added&&m){ if(ERP_OK)postMove(m,'adjust',-added,{ref:c.no,note:`Cutting ${c.no} deleted — sheets removed`}); else m.cur=+(Number(m.cur||0)-added).toFixed(3); }
   const cAdded=Number(c.contAdded||0), cm=c.result&&c.result.contMatId?matById(c.result.contMatId):null;
   if(cAdded&&cm){ if(ERP_OK)postMove(cm,'adjust',-cAdded,{ref:c.no,note:`Cutting ${c.no} deleted — contingent removed`}); else cm.cur=+(Number(cm.cur||0)-cAdded).toFixed(3); }
-  DB.cuts=DB.cuts.filter(x=>x.id!==id);save();renderCutTab();}
+  DB.cuts=DB.cuts.filter(x=>x.id!==id);save();
+  const docs=(DB.woDocs||[]).filter(d=>d.woId===id&&d.kind==='tallycut');
+  for(const d of docs){try{await sb.from('wo_docs').delete().eq('id',d.id); await sb.storage.from(DOC_BUCKET).remove([d.path]);}catch(e){console.error(e);}}
+  if(docs.length)DB.woDocs=DB.woDocs.filter(d=>!(d.woId===id&&d.kind==='tallycut'));
+  renderCutTab();}
 function viewCut(id){const c=DB.cuts.find(x=>x.id===id);
   openModal(`<div class="row"><b style="font-size:16px">Cutting Order ${c.no}</b><div class="spacer"></div>
     <button class="btn ghost sm" onclick='docPDF("cut",${JSON.stringify(id)})'>⬇ PDF</button>
     <button class="btn ghost sm" onclick="closeModal()">Close</button></div>
-    <div style="margin-top:12px">${buildCutSheet(c)}</div>`);
+    <div style="margin-top:12px">${buildCutSheet(c)}</div>${cutDocsHTML(c)}`);
+}
+function cutDocsHTML(c){
+  if(!DOCS_OK)return '';
+  const ds=docsFor(c.id,'tallycut');
+  return `<div class="divider"></div><div class="row"><b>Tally cutting orders</b><span class="tag">${ds.length}</span><div class="spacer"></div>
+    ${canDocs()?`<button class="btn ghost sm" onclick='uploadDocModal("tallycut",${JSON.stringify(c.id)})'>＋ Upload Tally Cutting</button>`:''}</div>
+    ${ds.length?`<table class="oneline" style="margin-top:6px"><tbody>${ds.map(d=>`<tr><td><b>${escH(d.docNo)}</b></td><td>${escH(d.docDate||'')}</td>
+      <td>${d.check?`<span style="cursor:pointer" onclick='showCheck(${JSON.stringify(d.id)})'>${verdictPill(d)}</span>`:verdictPill(d)}</td>
+      <td class="num"><button class="btn ghost sm" onclick='openDocFile(${JSON.stringify(d.id)})'>📄 PDF</button>
+      ${canDocs()?`<button class="btn sm" onclick='closeModal();runCheck(${JSON.stringify(d.id)})'>🤖 Check</button>`:''}</td></tr>`).join('')}</tbody></table>`
+    :`<div class="muted small">None uploaded.</div>`}`;
 }
 const MMCFT=43891.2; // = 1728 × 25.4 : L(in) × B(in) × H(mm) ÷ 43891.2 = CFT
 function isMM(c){return !!c&&(c.v===2||c.v===3);}
@@ -3238,7 +3276,12 @@ function prodDashHTML(){
 // Each uploaded PDF is one row in table `wo_docs`; the file itself lives in Storage bucket `wo-docs`.
 const DOC_BUCKET='wo-docs';
 const DOC_KINDS={invoice:{label:'Invoice',plural:'Invoices',noLabel:'Invoice No'},
-                 tally:{label:'Tally WO',plural:'Tally Work Orders',noLabel:'Tally WO No'}};
+                 tally:{label:'Tally WO',plural:'Tally Work Orders',noLabel:'Tally WO No'},
+                 tallycut:{label:'Tally Cutting',plural:'Tally cutting orders',noLabel:'Tally voucher No',parent:'cut'}};
+// a document belongs to a work order, or (Tally Cutting) to a block cutting order
+function parentOf(d){return d.kind==='tallycut'?DB.cuts.find(c=>c.id===d.woId):woById(d.woId);}
+function cutBrief(c){if(!c)return '';const r=c.result;
+  return `${cutGradeName(c)} · ${c.v===3?c.blocks.length:c.qty} block(s) · ${fmt(blockCFT(c),2)} CFT`+(r?` · sheets ${fmt(r.sheetsCFT,2)} · contingent ${fmt(cutCont(c),2)} CFT`:' · result not recorded');}
 let DOCS_OK=false, DOC_BUSY={};
 function canDocs(){return !!CURRENT_USER&&(CURRENT_USER.role==='admin'||CURRENT_USER.role==='office');}
 function escH(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
@@ -3276,7 +3319,7 @@ function docStatus(woId,kind){
 function docStatusCell(o,kind){
   const s=docStatus(o.id,kind);
   if(s.cls==='none')return `<span class="muted">—</span>`;
-  return `<span class="pill ${s.cls}" title="${escH(s.tip)}" style="cursor:pointer" onclick='openDocTab("${kind}",${JSON.stringify(o.num)})'>${s.txt}</span>`;
+  return `<span class="pill ${s.cls}" title="${escH(s.tip)}" style="cursor:pointer" onclick='openDocTab("${kind}",${JSON.stringify(o.num||o.no)})'>${s.txt}</span>`;
 }
 function verdictPill(d){
   if(DOC_BUSY[d.id])return `<span class="pill pend">Checking…</span>`;
@@ -3288,7 +3331,8 @@ function verdictPill(d){
   return `<span class="pill low">? Unclear</span>`;
 }
 function openDocTab(kind,woNum){
-  showWO(kind==='invoice'?'inv':'tally');
+  if(kind==='tallycut'){go('cutting');showCut('tally');}
+  else showWO(kind==='invoice'?'inv':'tally');
   const f=document.getElementById('docF-'+kind); if(f){f.value=woNum||'';renderDocTab(kind);}
 }
 
@@ -3308,8 +3352,8 @@ function renderDocTab(kind){
   const st=document.getElementById('docS-'+kind).value;
   let list=(DB.woDocs||[]).filter(d=>d.kind===kind).slice().reverse();
   list=list.filter(d=>{
-    const o=woById(d.woId)||{};
-    const hay=[d.woNum,o.cust,o.model,d.docNo].join(' ').toLowerCase();
+    const o=parentOf(d)||{};
+    const hay=[d.woNum,o.cust,o.model,o.supplier,o.mat?cutGradeName(o):'',d.docNo].join(' ').toLowerCase();
     if(q&&!hay.includes(q))return false;
     if(st==='pending'&&d.check)return false;
     if(st==='match'&&!(d.check&&(d.check.verdict==='match'||isAccepted(d))))return false;
@@ -3319,15 +3363,19 @@ function renderDocTab(kind){
   });
   document.getElementById('docCount-'+kind).textContent=list.length+' of '+(DB.woDocs||[]).filter(d=>d.kind===kind).length;
   const canRun=canDocs();
+  const isCut=kind==='tallycut';
   box.innerHTML=list.length?`<table class="oneline"><thead><tr>
-      <th>WO #</th><th>Customer</th><th>Model</th><th class="num">Size</th><th class="num">Qty</th>
+      ${isCut?'<th>Cut #</th><th>Grade</th><th class="num">Blocks</th><th class="num">Block CFT</th><th class="num">Sheets CFT</th><th class="num">Contingent</th>'
+        :'<th>WO #</th><th>Customer</th><th>Model</th><th class="num">Size</th><th class="num">Qty</th>'}
       <th>${K.noLabel}</th><th>Date</th><th>Uploaded</th><th>Claude check</th><th class="num"></th></tr></thead><tbody>`+
-    list.map(d=>{const o=woById(d.woId);
+    list.map(d=>{const o=parentOf(d);
       return `<tr>
         <td><b>${escH(d.woNum)}</b></td>
-        <td class="ell" title="${escH(o?o.cust:'')}">${escH(o?o.cust||'-':'(deleted WO)')}</td>
+        ${isCut?`<td class="ell">${escH(o?cutGradeName(o):'(deleted)')}</td><td class="num">${o?(o.v===3?o.blocks.length:o.qty):'-'}</td>
+          <td class="num">${o?fmt(blockCFT(o),2):'-'}</td><td class="num">${o&&o.result?fmt(o.result.sheetsCFT,2):'—'}</td><td class="num">${o&&o.result?fmt(cutCont(o),2):'—'}</td>`
+        :`<td class="ell" title="${escH(o?o.cust:'')}">${escH(o?o.cust||'-':'(deleted WO)')}</td>
         <td class="ell" title="${escH(o?o.brand+' · '+o.model:'')}">${escH(o?o.model:'-')}</td>
-        <td class="num">${o?`${o.L}×${o.W}×${o.H}`:'-'}</td><td class="num">${o?o.Q:'-'}</td>
+        <td class="num">${o?`${o.L}×${o.W}×${o.H}`:'-'}</td><td class="num">${o?o.Q:'-'}</td>`}
         <td><b>${escH(d.docNo||'-')}</b></td><td>${escH(d.docDate||'-')}</td>
         <td class="muted small" title="${escH(d.fileName||'')}">${escH(d.by||'')} · ${escH((d.at||'').slice(0,10))}</td>
         <td>${d.check?`<span style="cursor:pointer" onclick='showCheck(${JSON.stringify(d.id)})'>${verdictPill(d)}</span>`:verdictPill(d)}</td>
@@ -3344,16 +3392,17 @@ function renderDocTab(kind){
 function uploadDocModal(kind,woId){
   if(!canDocs()){alert('Only admin and office users can upload.');return;}
   if(!DOCS_OK){alert('Document storage is not set up yet in Supabase. See the setup guide.');return;}
-  const K=DOC_KINDS[kind];
-  const opts=DB.orders.slice().reverse().map(o=>`<option value="${escH(o.num)}">${escH(o.num)} · ${escH(o.cust||'')} · ${escH(o.model)} ${o.L}×${o.W}×${o.H} × ${o.Q}</option>`).join('');
-  const pre=woId?(woById(woId)||{}).num:'';
+  const K=DOC_KINDS[kind], isCut=kind==='tallycut';
+  const opts=isCut?DB.cuts.slice().reverse().map(c=>`<option value="${escH(c.no)}">${escH(c.no)} · ${escH(c.date||'')} · ${escH(cutBrief(c))}</option>`).join('')
+    :DB.orders.slice().reverse().map(o=>`<option value="${escH(o.num)}">${escH(o.num)} · ${escH(o.cust||'')} · ${escH(o.model)} ${o.L}×${o.W}×${o.H} × ${o.Q}</option>`).join('');
+  const pre=woId?(isCut?(DB.cuts.find(c=>c.id===woId)||{}).no:(woById(woId)||{}).num):'';
   openModal(`<div class="row"><b style="font-size:16px">Upload ${K.label} (PDF)</b><div class="spacer"></div>
       <button class="btn ghost sm" onclick="closeModal()">Cancel</button></div>
     <div class="grid g2" style="margin-top:12px">
-      <div style="grid-column:1/-1"><label class="f">Against work order</label>
-        <input id="dWO" list="dlWOnum" value="${escH(pre||'')}" placeholder="type WO number or customer…" autocomplete="off">
+      <div style="grid-column:1/-1"><label class="f">Against ${isCut?'cutting order':'work order'}</label>
+        <input id="dWO" list="dlWOnum" value="${escH(pre||'')}" placeholder="${isCut?'type cutting order number…':'type WO number or customer…'}" autocomplete="off">
         <datalist id="dlWOnum">${opts}</datalist></div>
-      <div><label class="f">${K.noLabel}</label><input id="dNo" placeholder="${kind==='invoice'?'e.g. NC/245/26-27':'e.g. TWO-118'}"></div>
+      <div><label class="f">${K.noLabel}</label><input id="dNo" placeholder="${kind==='invoice'?'e.g. NC/245/26-27':isCut?'e.g. SJ-57':'e.g. TWO-118'}"></div>
       <div><label class="f">${K.label} date</label><input id="dDate" type="date" value="${today()}"></div>
       <div style="grid-column:1/-1"><label class="f">PDF file (max 10 MB)</label><input id="dFile" type="file" accept="application/pdf,.pdf"></div>
     </div>
@@ -3365,8 +3414,9 @@ function uploadDocModal(kind,woId){
 async function commitDoc(kind){
   const err=m=>{const b=document.getElementById('dErr');b.className='banner err';b.textContent=m;};
   const woTxt=document.getElementById('dWO').value.trim();
-  const o=DB.orders.find(x=>String(x.num).toLowerCase()===woTxt.toLowerCase());
-  if(!o)return err('Pick a work order from the list.');
+  const isCut=kind==='tallycut';
+  const o=isCut?DB.cuts.find(x=>String(x.no).toLowerCase()===woTxt.toLowerCase()):DB.orders.find(x=>String(x.num).toLowerCase()===woTxt.toLowerCase());
+  if(!o)return err(isCut?'Pick a cutting order from the list.':'Pick a work order from the list.');
   const docNo=document.getElementById('dNo').value.trim();
   if(!docNo)return err(DOC_KINDS[kind].noLabel+' is required.');
   const f=document.getElementById('dFile').files[0];
@@ -3379,7 +3429,7 @@ async function commitDoc(kind){
   try{
     const up=await sb.storage.from(DOC_BUCKET).upload(path,f,{contentType:'application/pdf',upsert:false});
     if(up.error)throw up.error;
-    const d={id,woId:o.id,woNum:o.num,kind,docNo,docDate:document.getElementById('dDate').value,
+    const d={id,woId:o.id,woNum:isCut?o.no:o.num,kind,docNo,docDate:document.getElementById('dDate').value,
       path,fileName:f.name,size:f.size,by:CURRENT_USER.name,at:new Date().toISOString(),check:null};
     await pushDoc(d);
     DB.woDocs.push(d);
@@ -3486,17 +3536,17 @@ async function reopenDoc(id){
 }
 function showCheck(id){
   const d=(DB.woDocs||[]).find(x=>x.id===id); if(!d||!d.check)return;
-  const c=d.check, o=woById(d.woId)||{}, K=DOC_KINDS[d.kind];
+  const c=d.check, o=parentOf(d)||{}, K=DOC_KINDS[d.kind], isCut=d.kind==='tallycut';
   const rowCls={ok:'ok',mismatch:'crit',missing:'crit',info:'pend'};
   const rowTxt={ok:'✓ OK',mismatch:'✗ Different',missing:'✗ Missing',info:'Info'};
   openModal(`<div class="row"><b style="font-size:16px">Claude check — ${K.label} ${escH(d.docNo)} vs ${escH(d.woNum)}</b><div class="spacer"></div>
       <button class="btn ghost sm" onclick='openDocFile(${JSON.stringify(d.id)})'>📄 PDF</button>
-      <button class="btn ghost sm" onclick='viewWO(${JSON.stringify(d.woId)})'>Work order</button>
+      ${isCut?`<button class="btn ghost sm" onclick='viewCut(${JSON.stringify(d.woId)})'>Cutting order</button>`:`<button class="btn ghost sm" onclick='viewWO(${JSON.stringify(d.woId)})'>Work order</button>`}
       <button class="btn ghost sm" onclick="closeModal()">Close</button></div>
     <div style="margin-top:12px" class="row">${verdictPill(d)}<span class="small">${escH(c.summary||'')}</span></div>
-    <div class="tag" style="margin-top:6px">${escH(o.cust||'')} · ${escH(o.brand||'')} ${escH(o.model||'')} · ${o.L}×${o.W}×${o.H} · Qty ${o.Q}
+    <div class="tag" style="margin-top:6px">${isCut?escH(cutBrief(o)):`${escH(o.cust||'')} · ${escH(o.brand||'')} ${escH(o.model||'')} · ${o.L}×${o.W}×${o.H} · Qty ${o.Q}`}
       ${c.document&&c.document.party?` · PDF party: ${escH(c.document.party)}`:''}${c.document&&c.document.total_amount?` · Amount: ${escH(c.document.total_amount)}`:''}</div>
-    <div style="overflow:auto;margin-top:10px"><table class="oneline"><thead><tr><th>Item</th><th>Work order</th><th>${K.label} PDF</th><th>Result</th><th>Note</th></tr></thead><tbody>
+    <div style="overflow:auto;margin-top:10px"><table class="oneline"><thead><tr><th>Item</th><th>${isCut?'Cutting order (app)':'Work order'}</th><th>${K.label} PDF</th><th>Result</th><th>Note</th></tr></thead><tbody>
       ${(c.checks||[]).map(x=>`<tr><td><b>${escH(x.item)}</b></td><td>${escH(x.work_order)}</td><td>${escH(x.document)}</td>
         <td><span class="pill ${rowCls[x.status]||'pend'}">${rowTxt[x.status]||escH(x.status)}</span></td><td class="small wrap">${escH(x.note||'')}</td></tr>`).join('')}
     </tbody></table></div>
