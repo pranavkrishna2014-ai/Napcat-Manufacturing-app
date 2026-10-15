@@ -25,11 +25,11 @@
   header.top .brand span{color:var(--accent)}
   header.top .sub{color:var(--muted);font-size:12px}
   nav.tabs{display:flex;gap:4px;margin-left:auto;flex-wrap:wrap}
-  nav.tabs button{background:transparent;border:1px solid transparent;color:var(--muted);padding:8px 14px;border-radius:8px;
+  nav.tabs button{background:transparent;border:1px solid transparent;color:var(--muted);padding:7px 11px;border-radius:8px;
     cursor:pointer;font-size:13px;font-weight:600}
   nav.tabs button:hover{color:var(--txt);background:var(--panel2)}
   nav.tabs button.active{color:#fff;background:var(--accent)}
-  main{padding:22px;max-width:1400px;margin:0 auto}
+  main{padding:18px 16px;max-width:1600px;margin:0 auto}
   .view{display:none} .view.active{display:block}
   h2.section{font-size:20px;margin-bottom:4px}
   .lead{color:var(--muted);margin-bottom:18px;font-size:13px}
@@ -65,8 +65,42 @@
   .pill.crit{background:#fdecea;color:#c8241a}
   .pill.pend{background:#eef1f6;color:#4a5568}
   /* one-line tables: every record on a single neat row */
-  table.oneline th,table.oneline td{white-space:nowrap;padding:8px 10px}
-  table.oneline td.ell{max-width:170px;overflow:hidden;text-overflow:ellipsis}
+  table.oneline th,table.oneline td{white-space:nowrap;padding:7px 8px;font-size:12.5px}
+  table.oneline th{font-size:10.5px}
+  table.oneline td.ell{max-width:150px;overflow:hidden;text-overflow:ellipsis}
+  table.oneline td.acts .btn.sm{padding:4px 8px}
+  table.oneline .pill{white-space:nowrap}
+  /* tablets & phones: every list row becomes a compact card — no sideways scrolling */
+  @media(max-width:1260px){
+    table.oneline thead{display:none}
+    table.oneline,table.oneline tbody,table.oneline tr,table.oneline td{display:block;width:100%}
+    table.oneline tbody tr{border:1px solid var(--line);border-radius:10px;margin:8px;width:auto;padding:6px 10px;background:var(--panel)}
+    table.oneline tbody tr:nth-child(even) td,table.oneline tbody tr:hover td{background:transparent}
+    table.oneline td{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:3px 0;border:none;white-space:normal;text-align:right;font-size:13px}
+    table.oneline td::before{content:attr(data-label);color:var(--muted);font-size:10.5px;text-transform:uppercase;letter-spacing:.3px;font-weight:700;text-align:left;flex:none}
+    table.oneline td:first-child{font-size:14px;border-bottom:1px solid var(--line);padding-bottom:5px;margin-bottom:3px}
+    table.oneline td.ell{max-width:none;overflow:visible}
+    table.oneline td.acts{justify-content:flex-end;flex-wrap:wrap;gap:4px;padding-top:6px;width:100% !important}
+    table.oneline td.acts .btn{margin-left:0}
+    table.oneline td.acts::before,table.oneline td[data-label=""]::before{content:none}
+    table.oneline td.empty{display:none}
+  }
+  /* phones: compact header and only the essentials in each card */
+  @media(max-width:640px){
+    header.top{flex-wrap:wrap;gap:6px 10px;padding:10px 12px}
+    header.top .brand{font-size:16px} header.top .sub{display:none}
+    header.top>.row{margin-left:auto}
+    nav.tabs#tabs{order:3;width:100%;margin-left:0;gap:2px}
+    nav.tabs button{padding:5px 8px;font-size:12px}
+    main{padding:12px 8px}
+    .card{padding:12px;margin-bottom:12px}
+    h2.section{font-size:17px} .lead{font-size:12px;margin-bottom:10px}
+    table.oneline tbody tr{margin:6px 4px;padding:5px 9px}
+    table.oneline td{font-size:12.5px;padding:2px 0}
+    table.oneline td[data-label="City"],table.oneline td[data-label="Agent"],table.oneline td[data-label="Uploaded"],
+    table.oneline td[data-label="Yield"],table.oneline td[data-label="Supplier"],table.oneline td[data-label="Supplier inv."],
+    table.oneline td[data-label="Last movement"],table.oneline td[data-label="By"]{display:none}
+  }
   table.oneline td.wrap{white-space:normal;min-width:180px}
   table.oneline td.acts{width:1%}
   table.oneline td.acts .btn{margin-left:3px}
@@ -345,7 +379,7 @@
           <button class="btn noprint" onclick="editUser(null)">+ New User</button></div>
         <p class="lead">Admins access everything. Operators (e.g. Shiva) get only Workorder, Block Cutting &amp; Quilting — and never see flags.</p>
         <div class="card" style="padding:0;overflow:auto">
-          <table id="userTable"><thead><tr><th>Name</th><th>Username</th><th>Role</th><th>PIN</th><th class="noprint"></th></tr></thead><tbody></tbody></table>
+          <table id="userTable" class="oneline"><thead><tr><th>Name</th><th>Username</th><th>Role</th><th>PIN</th><th class="noprint"></th></tr></thead><tbody></tbody></table>
         </div>
       </div>
 
@@ -375,7 +409,7 @@
           <div class="spacer"></div><span class="tag" id="matCount"></span>
         </div></div>
         <div class="card" style="padding:0;overflow:auto">
-          <table id="matTable"><thead><tr>
+          <table id="matTable" class="oneline"><thead><tr>
             <th>Material</th><th>Category</th><th>Unit</th><th class="num">Current</th><th class="num">Min</th><th class="num">Max</th>
             <th class="num">Sheet sizes</th><th>Supplier</th><th>Status</th><th class="noprint"></th>
           </tr></thead><tbody></tbody></table>
@@ -436,6 +470,7 @@
       <div class="card">
         <div class="row">
           <b>Tally cutting orders</b><span class="tag" id="docCount-tallycut"></span><div class="spacer"></div>
+          <button class="btn ghost sm" id="docRe-tallycut" onclick="checkAllDocs('tallycut',true)" style="display:none" title="Run Claude again on every Tally cutting PDF with the latest checking rules">🔁 Re-check all</button>
           <button class="btn sm" id="docAll-tallycut" onclick="checkAllDocs('tallycut')" style="display:none"></button>
           <button class="btn g sm" id="docUp-tallycut" onclick="uploadDocModal('tallycut')">＋ Upload Tally Cutting PDF</button>
         </div>
@@ -1844,12 +1879,12 @@ function renderCutAll(){
   const from=document.getElementById('cutFrom').value,to=document.getElementById('cutTo').value;
   const list=DB.cuts.filter(c=>inRange(c.date||'',from,to)).slice().reverse();
   document.getElementById('cutCount').textContent=list.length+' of '+DB.cuts.length;
-  document.getElementById('cutAllList').innerHTML= list.length?`<table><thead><tr>
-    <th>Cut #</th><th>Date</th><th>Grade</th><th class="num">Block size × blocks</th><th>Supplier</th><th>Invoice</th><th class="num">Block CFT</th><th class="num">Sheets CFT</th><th class="num">Contingent CFT</th><th class="num">Yield</th><th>Status</th>${DOCS_OK?'<th>Tally</th>':''}<th class="noprint"></th>
+  document.getElementById('cutAllList').innerHTML= list.length?`<table class="oneline"><thead><tr>
+    <th>Cut #</th><th>Date</th><th>Grade</th><th class="num">Blocks</th><th>Supplier</th><th>Supplier inv.</th><th class="num">Block CFT</th><th class="num">Sheets CFT</th><th class="num">Contingent CFT</th><th class="num">Yield</th><th>Status</th>${DOCS_OK?'<th>Tally</th>':''}<th class="noprint"></th>
     </tr></thead><tbody>`+list.map(c=>{
       const out=c.result?c.result.sheetsCFT:0;const yld=c.result&&c.result.blockCFT?100*out/c.result.blockCFT:0;
       return `<tr><td><b>${c.no}</b>${c.edited?' <span class="pill low">EDITED</span>':''}</td><td>${c.date||''}</td><td>${cutGradeName(c)}</td>
-      <td class="num">${cutSizeQ(c)}</td><td>${c.supplier||'-'}</td><td>${c.invoiceNo||'-'}</td>
+      <td class="num">${cutSizeQ(c)}</td><td class="ell" title="${escH(c.supplier||'')}">${escH(c.supplier||'-')}</td><td class="ell" title="${escH(c.invoiceNo||'')}">${escH(c.invoiceNo||'-')}</td>
       <td class="num">${fmt(blockCFT(c),2)}</td><td class="num">${c.result?fmt(out,2):'—'}</td><td class="num">${c.result?fmt(cutCont(c),3):'—'}</td><td class="num">${c.result?fmt(yld,1)+'%':'—'}</td>
       <td><span class="pill ${c.status==='completed'?'ok':'low'}">${c.status==='completed'?'DONE':'ISSUED'}</span></td>
       ${DOCS_OK?`<td>${docStatusCell(c,'tallycut')}</td>`:''}
@@ -1894,7 +1929,7 @@ function cutDocsHTML(c){
 const MMCFT=43891.2; // = 1728 × 25.4 : L(in) × B(in) × H(mm) ÷ 43891.2 = CFT
 function isMM(c){return !!c&&(c.v===2||c.v===3);}
 function blockCFT(c){if(c&&c.v===3)return (c.blocks||[]).reduce((s,b)=>s+b.L*b.W*b.H/MMCFT,0);return isMM(c)?(c.L*c.W*c.H/MMCFT)*(c.qty||1):(c.L*c.W*c.H/1728)*(c.qty||1);}
-function cutSizeQ(c){if(c.v===3){const b=c.blocks||[];return b.length===1?`${b[0].L}×${b[0].W}" × ${b[0].H}mm × 1`:`${b.length} blocks (${fmt(blockCFT(c),2)} CFT)`;}return cutSize(c)+' × '+c.qty;}
+function cutSizeQ(c){if(c.v===3){const b=c.blocks||[];return b.length===1?`${b[0].L}×${b[0].W}" × ${b[0].H}mm × 1`:`${b.length} blocks`;}return cutSize(c)+' × '+c.qty;}
 function cutSize(c){return isMM(c)?`${c.L}×${c.W}" × ${c.H}mm`:`${c.L}×${c.W}×${c.H}"`;}
 function cutCont(c){const r=c.result;if(!r)return null;return isMM(c)?r.contingent:(r.blockCFT-r.sheetsCFT);}
 function cutGradeName(c){const m=matById(c.mat);return m?m.name:'?';}
@@ -1905,7 +1940,7 @@ function renderCutting(){
     ["Sheets produced (CFT)",fmt(DB.cuts.reduce((s,c)=>s+(c.result?c.result.sheetsCFT:0),0),1)]];
   document.getElementById('cutKpis').innerHTML=k.map(([l,v])=>`<div class="kpi"><div class="v">${v}</div><div class="l">${l}</div></div>`).join('');
   const cl=DB.cuts.slice().reverse().slice(0,50);
-  document.getElementById('cutList').innerHTML= cl.length?`<table><thead><tr>
+  document.getElementById('cutList').innerHTML= cl.length?`<table class="oneline"><thead><tr>
     <th>Cut #</th><th>Date</th><th>Grade · Block size</th><th>Supplier</th><th>Planned</th><th class="num">Sheets CFT</th><th class="num">Contingent</th><th class="num">Yield</th><th>Status</th><th class="noprint"></th>
     </tr></thead><tbody>`+cl.map(c=>{
       const planned=c.planned.map(p=>`${p.count}×${p.thk}${isMM(c)?'mm':'"'}`).join(', ');
@@ -2450,7 +2485,7 @@ function renderQuiltAll(){
   const from=document.getElementById('quiltFrom').value,to=document.getElementById('quiltTo').value;
   const list=DB.quiltJobs.filter(j=>inRange(j.date||'',from,to)).slice().reverse();
   document.getElementById('quiltCount').textContent=list.length+' of '+DB.quiltJobs.length;
-  document.getElementById('quiltAllList').innerHTML= list.length?`<table><thead><tr>
+  document.getElementById('quiltAllList').innerHTML= list.length?`<table class="oneline"><thead><tr>
     <th>Job #</th><th>Date</th><th>Quilter</th><th>Fabric</th><th class="num">Issued</th><th class="num">Received</th><th>Lots</th><th>Status</th><th class="noprint"></th>
     </tr></thead><tbody>`+list.map(j=>{const rc=quiltRecv(j);const st=j.status==='received'?'CLOSED':(rc>0?'PARTIAL':'ISSUED');
       return `<tr><td><b>${j.no}</b>${j.edited?' <span class="pill low">EDITED</span>':''}</td><td>${j.date||''}</td><td>${j.quilter||'-'}</td><td>${(j.sets&&j.sets.length>1)?('<b>'+j.sets.length+' sets</b> · '):''}${j.fabric||'-'}</td>
@@ -2482,7 +2517,7 @@ function renderQuilting(){
     ["Fabric issued (m)",fmt(fab,1)],["Received so far (m)",fmt(rcv,1)]];
   document.getElementById('quiltKpis').innerHTML=k.map(([l,v])=>`<div class="kpi"><div class="v">${v}</div><div class="l">${l}</div></div>`).join('');
   const jl=DB.quiltJobs.slice().reverse();
-  document.getElementById('quiltList').innerHTML= jl.length?`<table><thead><tr>
+  document.getElementById('quiltList').innerHTML= jl.length?`<table class="oneline"><thead><tr>
     <th>Job #</th><th>Quilter</th><th>Fabric</th><th class="num">Issued (m)</th><th class="num">Received (m)</th><th class="num">Remaining</th><th>Lots</th><th>Status</th><th class="noprint"></th>
     </tr></thead><tbody>`+jl.map(j=>{const rc=quiltRecv(j);const rem=(+j.fabM||0)-rc;
       const st=j.status==='received'?'CLOSED':(rc>0?'PARTIAL':'ISSUED');
@@ -3346,6 +3381,8 @@ function renderDocTab(kind){
   if(allBtn){const n=(DB.woDocs||[]).filter(d=>d.kind===kind&&!d.check).length;
     allBtn.style.display=(canDocs()&&DOCS_OK&&(n||BULK[kind]))?'':'none';
     allBtn.disabled=!!BULK[kind]; allBtn.textContent=BULK[kind]?'🤖 Checking…':`🤖 Check all unchecked (${n})`;}
+  const reBtn=document.getElementById('docRe-'+kind);
+  if(reBtn){const n=(DB.woDocs||[]).filter(d=>d.kind===kind&&d.check).length; reBtn.style.display=(canDocs()&&DOCS_OK&&n&&!BULK[kind])?'':'none';}
   const setup=document.getElementById('docSetup-'+kind);
   if(setup)setup.style.display=DOCS_OK?'none':'block';
   const q=(document.getElementById('docF-'+kind).value||'').trim().toLowerCase();
@@ -3377,13 +3414,13 @@ function renderDocTab(kind){
         <td class="ell" title="${escH(o?o.brand+' · '+o.model:'')}">${escH(o?o.model:'-')}</td>
         <td class="num">${o?`${o.L}×${o.W}×${o.H}`:'-'}</td><td class="num">${o?o.Q:'-'}</td>`}
         <td><b>${escH(d.docNo||'-')}</b></td><td>${escH(d.docDate||'-')}</td>
-        <td class="muted small" title="${escH(d.fileName||'')}">${escH(d.by||'')} · ${escH((d.at||'').slice(0,10))}</td>
+        <td class="muted small" title="${escH((d.by||'')+' · '+(d.fileName||''))}">${escH((d.by||'').split(' ')[0])} · ${escH((d.at||'').slice(5,10))}</td>
         <td>${d.check?`<span style="cursor:pointer" onclick='showCheck(${JSON.stringify(d.id)})'>${verdictPill(d)}</span>`:verdictPill(d)}</td>
         <td class="num acts">
-          <button class="btn ghost sm" title="Open PDF" onclick='openDocFile(${JSON.stringify(d.id)})'>📄 PDF</button>
-          ${canRun?`<button class="btn sm" title="Ask Claude to compare this PDF with the work order" ${DOC_BUSY[d.id]?'disabled':''} onclick='runCheck(${JSON.stringify(d.id)})'>🤖 ${d.check?'Re-check':'Check'}</button>`:''}
-          ${d.check?`<button class="btn ghost sm" onclick='showCheck(${JSON.stringify(d.id)})'>Result</button>`:''}
-          ${isIssue(d)&&canResolve()?`<button class="btn ghost sm" style="color:var(--accent2)" title="Differences are not important — mark as OK" onclick='acceptModal(${JSON.stringify(d.id)})'>✓ Accept</button>`:''}
+          <button class="btn ghost sm" title="Open PDF" onclick='openDocFile(${JSON.stringify(d.id)})'>📄</button>
+          ${canRun?`<button class="btn sm" title="${d.check?'Re-check':'Check'} with Claude" ${DOC_BUSY[d.id]?'disabled':''} onclick='runCheck(${JSON.stringify(d.id)})'>🤖</button>`:''}
+          ${d.check?`<button class="btn ghost sm" title="Claude's result" onclick='showCheck(${JSON.stringify(d.id)})'>Result</button>`:''}
+          ${isIssue(d)&&canResolve()?`<button class="btn ghost sm" style="color:var(--accent2)" title="Differences are not important — mark as OK" onclick='acceptModal(${JSON.stringify(d.id)})'>✓</button>`:''}
           ${canRun?`<button class="btn danger ghost sm" title="Delete" onclick='delDoc(${JSON.stringify(d.id)})'>✕</button>`:''}
         </td></tr>`;}).join('')+`</tbody></table>`
     :`<p class="muted small" style="padding:14px">${DOCS_OK?'No '+K.plural.toLowerCase()+' uploaded yet.':'Online document storage is not set up yet.'}</p>`;
@@ -3481,11 +3518,11 @@ async function runCheck(id,opts){
 
 /* ---- Check all unchecked PDFs in one go (2 at a time) ---- */
 let BULK={};
-async function checkAllDocs(kind){
+async function checkAllDocs(kind,all){
   if(BULK[kind])return;
-  const todo=(DB.woDocs||[]).filter(d=>d.kind===kind&&!d.check).map(d=>d.id);
+  const todo=(DB.woDocs||[]).filter(d=>d.kind===kind&&(all||!d.check)).map(d=>d.id);
   if(!todo.length)return;
-  if(!confirm(`Ask Claude to check ${todo.length} unchecked ${DOC_KINDS[kind].plural.toLowerCase()}?\nRoughly ₹2–4 each with Sonnet (less with Haiku). You can keep working meanwhile.`))return;
+  if(!confirm(`Ask Claude to ${all?'RE-CHECK ALL':'check'} ${todo.length} ${all?'':'unchecked '}${DOC_KINDS[kind].plural.toLowerCase()}?${all?'\nEarlier results (and any acceptances) are replaced by the new check.':''}\nRoughly ₹2–4 each with Sonnet (less with Haiku). You can keep working meanwhile.`))return;
   const job=BULK[kind]={total:todo.length,done:0,ok:0,diff:0,unclear:0,fail:[],stop:false};
   const banner=document.getElementById('docBulk-'+kind);
   const show=()=>{banner.style.display='block';banner.className='banner info';
@@ -3570,6 +3607,19 @@ function woDocsHTML(o){
   return `<div class="divider"></div>${part('invoice')}${part('tally')}`;
 }
 
+function labelTables(){
+  document.querySelectorAll('table.oneline').forEach(t=>{
+    const heads=[...t.querySelectorAll('thead th')].map(th=>th.textContent.trim());
+    if(!heads.length)return;
+    t.querySelectorAll('tbody tr').forEach(tr=>{let i=0;[...tr.children].forEach(td=>{
+      if(!td.hasAttribute('data-label'))td.setAttribute('data-label',heads[i]||'');
+      if(!td.textContent.trim()&&!td.querySelector('button,input,select'))td.classList.add('empty');
+      i+=+(td.getAttribute('colspan')||1);});});
+  });
+}
+let __lblPending=false;
+new MutationObserver(()=>{if(__lblPending)return;__lblPending=true;requestAnimationFrame(()=>{__lblPending=false;labelTables();});})
+  .observe(document.body,{childList:true,subtree:true});
 boot();
 </script>
 </body>
