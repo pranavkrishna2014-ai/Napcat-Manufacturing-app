@@ -166,7 +166,7 @@
     <button data-v="admin" data-role="admin">🔒 Admin Control</button>
     <button data-v="cutting">Block Cutting</button>
     <button data-v="quilting">Quilting</button>
-    <button data-v="stores">Stores</button>
+    <button data-v="sales">Sales Orders</button>
     <button data-v="dispatch">Dispatch</button>
     <button data-v="warranty">Warranty</button>
     <button data-v="others">Others</button>
@@ -208,10 +208,17 @@
       <button data-w="prod" onclick="showWO('prod')">🏭 Production</button>
       <button data-w="inv" onclick="showWO('inv')">🧾 Invoice</button>
       <button data-w="tally" onclick="showWO('tally')">📑 Tally WO</button>
+      <button data-w="pending" onclick="showWO('pending')">📥 Pending orders</button>
     </nav>
+    <div class="woSub" id="woSub-pending" style="display:none">
+      <div class="card"><div class="row"><b>Approved sales orders waiting for a work order</b><span class="tag" id="soPendCount"></span></div>
+        <div class="hint">Click “Create WO” — the work order form opens filled in from the sales order. Check the BOM and save.</div></div>
+      <div class="card" style="padding:0;overflow:auto"><div id="soPendBody"></div></div>
+    </div>
 
     <!-- Create -->
     <div class="woSub" id="woSub-create">
+      <div class="banner info" id="woSOBanner" style="display:none"></div>
       <div class="card">
         <div class="grid g3">
           <div><label class="f">Brand</label>
@@ -360,6 +367,7 @@
         <button data-a="flaglog" onclick="showAdmin('flaglog')">🔔 Flag Log</button>
         <button data-a="materials" onclick="showAdmin('materials')">Material Master</button>
         <button data-a="products" onclick="showAdmin('products')">Products &amp; BOM</button>
+        <button data-a="pricelist" onclick="showAdmin('pricelist')">💰 Price list</button>
         <button data-a="users" onclick="showAdmin('users')">Users</button>
         <button data-a="settings" onclick="showAdmin('settings')">Settings</button>
         <button data-a="data" onclick="showAdmin('data')">Backup</button>
@@ -377,6 +385,15 @@
       <div class="adminSub" id="adminSub-flaglog" style="display:none">
         <div class="row"><b>🔔 Flag Log</b><span class="tag">dismissed flags kept for later reconciliation</span></div>
         <div id="flagLogBody"></div>
+      </div>
+
+      <div class="adminSub" id="adminSub-pricelist" style="display:none">
+        <div class="row"><b>💰 Price list</b><span class="tag">per mattress, without GST — used for every new sales order</span><div class="spacer"></div>
+          <select id="plBrand" style="max-width:160px" onchange="renderPriceList()"><option value="">All brands</option></select>
+          <button class="btn ghost sm" onclick="importEd1()">⬇ Re-import Edition 1</button>
+          <button class="btn sm" onclick="plModal(null)">＋ New model</button></div>
+        <div class="card" style="margin-top:10px"><div class="row"><span id="plCo"></span><div class="spacer"></div><button class="btn ghost sm" onclick="companyModal()">Edit company details</button></div></div>
+        <div class="card" style="padding:0;overflow:auto"><div id="plBody"></div></div>
       </div>
 
       <div class="adminSub" id="adminSub-users" style="display:none">
@@ -521,6 +538,25 @@
     </div>
   </section>
 
+
+  <!-- SALES ORDERS -->
+  <section class="view" id="view-sales">
+    <div class="row"><h2 class="section">Sales Orders</h2><div class="spacer"></div><div id="soKpi" class="row" style="gap:6px"></div></div>
+    <p class="lead">Sales raise the order → admin approves → it goes to Workorder ▸ Pending orders → status follows the work order, packing slip and invoice.</p>
+    <nav class="tabs" style="margin:0 0 14px 0" id="salesTabs">
+      <button data-s="list" class="active" onclick="showSales('list')">📋 Sales orders</button>
+      <button data-s="new" onclick="newSO()">＋ New sales order</button>
+    </nav>
+    <div class="salesSub" id="salesSub-list">
+      <div class="card"><div class="row">
+        <input id="soF" placeholder="search SO #, customer, model…" style="max-width:260px" oninput="renderSOList()">
+        <select id="soS" style="max-width:200px" onchange="renderSOList()"><option value="">All statuses</option>
+          <option value="pending">Pending approval</option><option value="open">Approved · in progress</option>
+          <option value="done">Packed / invoiced</option><option value="rejected">Rejected</option></select></div></div>
+      <div class="card" style="padding:0;overflow:auto"><div id="soBody"></div></div>
+    </div>
+    <div class="salesSub" id="salesSub-new" style="display:none"><div id="soForm"></div></div>
+  </section>
 
   <!-- STORES (inventory ledger) -->
   <section class="view" id="view-stores">
@@ -746,7 +782,7 @@ function ensureDB(d){
   d.others=d.others||[];
   d.woDocs=d.woDocs||[];
   d.moves=d.moves||[]; d.serials=d.serials||[]; d.dispatches=d.dispatches||[]; d.claims=d.claims||[];
-  d.serialSeq=d.serialSeq||1; d.dispSeq=d.dispSeq||1; d.claimSeq=d.claimSeq||1; d.psSeq=d.psSeq||1;
+  d.serialSeq=d.serialSeq||1; d.dispSeq=d.dispSeq||1; d.claimSeq=d.claimSeq||1; d.psSeq=d.psSeq||1; d.soSeq=d.soSeq||1; d.salesOrders=d.salesOrders||[]; d.priceList=d.priceList||[];
   if(d.settings&&d.settings.warrantyYears==null){d.settings.warrantyYears=10;d.settings.replaceYears=3;}
   if(d.settings&&!d.settings.labelMode)d.settings.labelMode='roll';
   d.settings=d.settings||{flagWO:4,flagCut:20,flagQuilt:5};
@@ -783,7 +819,7 @@ const COLLS=[
   ['products','products', o=>({id:o.id,data:o})],
   ['app_users','users', o=>({id:o.id,data:o})],
 ];
-function metaObj(){return {settings:DB.settings,woSeq:DB.woSeq,blockSeq:DB.blockSeq,cutSeq:DB.cutSeq,quiltSeq:DB.quiltSeq,adminPin:DB.adminPin,flagLog:DB.flagLog,others:DB.others,serialSeq:DB.serialSeq,dispSeq:DB.dispSeq,claimSeq:DB.claimSeq,psSeq:DB.psSeq};}
+function metaObj(){return {settings:DB.settings,woSeq:DB.woSeq,blockSeq:DB.blockSeq,cutSeq:DB.cutSeq,quiltSeq:DB.quiltSeq,adminPin:DB.adminPin,flagLog:DB.flagLog,others:DB.others,serialSeq:DB.serialSeq,dispSeq:DB.dispSeq,claimSeq:DB.claimSeq,psSeq:DB.psSeq,soSeq:DB.soSeq};}
 function setSync(t,cls){const c=document.getElementById('syncChip');if(c){c.textContent=t;c.style.color=cls||'';}}
 
 function uid(){return Math.random().toString(36).slice(2,10)+Date.now().toString(36).slice(-4)}
@@ -803,7 +839,7 @@ async function cloudLoad(){
   const empty=!o.data.length&&!c.data.length&&!qq.data.length&&!m.data.length&&!p.data.length&&!u.data.length&&!md;
   if(empty) return true;
   DB={orders:rows(o),cuts:rows(c),quiltJobs:rows(qq),materials:rows(m),products:rows(p),users:rows(u),
-    settings:md&&md.settings,woSeq:md&&md.woSeq,blockSeq:md&&md.blockSeq,cutSeq:md&&md.cutSeq,quiltSeq:md&&md.quiltSeq,adminPin:md&&md.adminPin,flagLog:md&&md.flagLog,others:md&&md.others,serialSeq:md&&md.serialSeq,dispSeq:md&&md.dispSeq,claimSeq:md&&md.claimSeq,psSeq:md&&md.psSeq};
+    settings:md&&md.settings,woSeq:md&&md.woSeq,blockSeq:md&&md.blockSeq,cutSeq:md&&md.cutSeq,quiltSeq:md&&md.quiltSeq,adminPin:md&&md.adminPin,flagLog:md&&md.flagLog,others:md&&md.others,serialSeq:md&&md.serialSeq,dispSeq:md&&md.dispSeq,claimSeq:md&&md.claimSeq,psSeq:md&&md.psSeq,soSeq:md&&md.soSeq};
   ensureDB(DB);
   try{localStorage.setItem("wo_db",JSON.stringify(DB));}catch(e){}
   return false;
@@ -823,7 +859,7 @@ async function runPush(){
 async function cloudPushDiff(){
   const state=JSON.parse(JSON.stringify({orders:DB.orders,cuts:DB.cuts,quiltJobs:DB.quiltJobs,
     materials:DB.materials,products:DB.products,users:DB.users,meta:metaObj(),
-    moves:DB.moves,serials:DB.serials,dispatches:DB.dispatches,claims:DB.claims}));
+    moves:DB.moves,serials:DB.serials,dispatches:DB.dispatches,claims:DB.claims,salesOrders:DB.salesOrders,priceList:DB.priceList}));
   for(const [table,key,build] of activeColls()){
     const arr=state[key]||[]; const curMap={}; arr.forEach(x=>curMap[x.id]=JSON.stringify(x));
     const snap=SNAP[table]||{};
@@ -840,7 +876,7 @@ async function cloudPushAll(){ SNAP={}; await cloudPushDiff(); }
 function startPolling(){ setInterval(async()=>{
   if(!CLOUD_OK||pushing||dirty)return;
   if((document.getElementById('modal').style.display||'')==='flex')return;
-  try{ const empty=await cloudLoad(); await loadErp(); await loadDocs(); if(!empty){ initSnap(); refreshView(); } }catch(e){}
+  try{ const empty=await cloudLoad(); await loadErp(); await loadSales(); await loadDocs(); if(!empty){ initSnap(); refreshView(); } }catch(e){}
 }, 15000); }
 function refreshView(){
   if(!CURRENT_USER)return; const v=CURRENT_VIEW;
@@ -848,13 +884,14 @@ function refreshView(){
   else if(v==='cutting')renderCutTab(); else if(v==='quilting')renderQuiltTab();
   else if(v==='others')renderOthers();
   else if(v==='stores')renderStores(); else if(v==='dispatch')renderDispatch(); else if(v==='warranty')renderWarranty();
+  else if(v==='sales'){ if(SALES_SUB!=='new')renderSales(); }
 }
 async function boot(){
   setSync('● Connecting…','var(--warn)');
   if(sb){
     try{
       const empty=await cloudLoad();
-      await loadErp();
+      await loadErp(); await loadSales();
       if(empty){ DB=ensureDB(sampleDB()); await cloudPushAll(); }
       else initSnap();
       CLOUD_OK=true; setSync('● Online','var(--accent2)');
@@ -909,6 +946,7 @@ function fmt2(n){return Number(n||0).toFixed(2)}
 /* ============================ NAVIGATION ============================ */
 function go(v){
   if(CURRENT_USER && CURRENT_USER.role!=='admin' && v==='admin')v='wo';
+  if(CURRENT_USER && CURRENT_USER.role==='sales')v='sales';
   CURRENT_VIEW=v;
   document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('active',b.dataset.v===v));
   document.querySelectorAll('.view').forEach(s=>s.classList.remove('active'));
@@ -918,6 +956,7 @@ function go(v){
   if(v==='cutting')renderCutTab(); if(v==='quilting')renderQuiltTab();
   if(v==='others')renderOthers();
   if(v==='stores')renderStores(); if(v==='dispatch')renderDispatch(); if(v==='warranty')renderWarranty();
+  if(v==='sales')renderSales();
   window.scrollTo(0,0);}
 /* ============================ LOGIN & ROLES ============================ */
 let CURRENT_USER=null, ADMIN_SUB='review';
@@ -941,9 +980,10 @@ function restoreSession(){
 }
 function applyRole(){
   const admin=CURRENT_USER.role==='admin';
-  document.getElementById('userChip').textContent=CURRENT_USER.name+(admin?' · Admin':CURRENT_USER.role==='office'?' · Office':' · Operator');
-  document.querySelectorAll('#tabs button[data-role="admin"]').forEach(b=>b.style.display=admin?'':'none');
-  go('dash');
+  const sales=CURRENT_USER.role==='sales';
+  document.getElementById('userChip').textContent=CURRENT_USER.name+(admin?' · Admin':CURRENT_USER.role==='office'?' · Office':sales?' · Sales':' · Operator');
+  document.querySelectorAll('#tabs button').forEach(b=>b.style.display=(sales?b.dataset.v==='sales':(b.dataset.role!=='admin'||admin))?'':'none');
+  go(sales?'sales':'dash');
 }
 function renderAdmin(){ showAdmin(ADMIN_SUB); }
 function showAdmin(sub){
@@ -953,7 +993,7 @@ function showAdmin(sub){
   document.getElementById('adminSub-'+sub).style.display='block';
   if(sub==='materials')renderMaterials(); if(sub==='products')renderProducts();
   if(sub==='review')renderReview(); if(sub==='users')renderUsers(); if(sub==='settings')renderSettings();
-  if(sub==='flaglog')renderFlagLog();
+  if(sub==='flaglog')renderFlagLog(); if(sub==='pricelist')renderPriceList();
 }
 
 /* ============================ FLAG ENGINE (admin-only) ============================ */
@@ -1080,7 +1120,7 @@ function renderReview(){
 function renderUsers(){
   document.querySelector('#userTable tbody').innerHTML=DB.users.map(u=>`<tr>
     <td>${u.name}</td><td>${u.username}</td>
-    <td><span class="chip ${u.role==='admin'?'spring':u.role==='office'?'adhesive':'fabric'}">${u.role}</span></td>
+    <td><span class="chip ${u.role==='admin'?'spring':u.role==='office'?'adhesive':u.role==='sales'?'foam':'fabric'}">${u.role}</span></td>
     <td>${'•'.repeat(String(u.pin).length)}</td>
     <td class="num noprint"><button class="btn ghost sm" onclick='editUser(${JSON.stringify(u.id)})'>Edit</button></td></tr>`).join('');
 }
@@ -1094,6 +1134,7 @@ function editUser(id){
       <div><label class="f">PIN</label><input id="uPin" value="${u.pin}"></div>
       <div><label class="f">Role</label><select id="uRole">
         <option value="operator" ${u.role==='operator'?'selected':''}>Operator (Workorder, Cutting, Quilting)</option>
+        <option value="sales" ${u.role==='sales'?'selected':''}>Sales (Sales Orders only — sees own orders)</option>
         <option value="office" ${u.role==='office'?'selected':''}>Office (Operator + upload Invoices / Tally WO + Claude check)</option>
         <option value="admin" ${u.role==='admin'?'selected':''}>Admin (full access + flags)</option></select></div>
     </div>
@@ -1137,6 +1178,11 @@ document.getElementById('tabs').addEventListener('click',e=>{if(e.target.dataset
 function renderDash(){
   if(!CURRENT_USER){document.getElementById('dashBody').innerHTML='';return;}
   if(CURRENT_USER.role==='admin')renderAdminDash(); else renderUserDash();
+  try{const body=document.getElementById('dashBody');
+    const nA=(DB.salesOrders||[]).filter(s=>s.status==='pending').length; let nP=0; soPending().forEach(s=>nP+=soLinesShort(s).length);
+    const bits=[isAdmin()&&nA?`<b>${nA}</b> sales order(s) waiting for your approval <button class="btn g sm" onclick="go('sales');document.getElementById('soS').value='pending';renderSOList()">Review</button>`:'',
+      nP?`<b>${nP}</b> approved sales order item(s) need a work order <button class="btn sm" onclick="go('wo');showWO('pending')">Pending orders</button>`:''].filter(Boolean);
+    if(bits.length)body.insertAdjacentHTML('afterbegin',`<div class="banner info" style="display:block;margin-bottom:14px">${bits.join('<br>')}</div>`);}catch(e){}
   const pd=prodDashHTML(); if(pd){const body=document.getElementById('dashBody'), lead=body.querySelector('p.lead');
     let el=lead; while(el&&el.parentElement!==body)el=el.parentElement;
     if(el)el.insertAdjacentHTML('afterend',pd); else body.insertAdjacentHTML('afterbegin',pd);}
@@ -1261,6 +1307,7 @@ function showWO(sub){
   document.getElementById('woSub-'+sub).style.display='block';
   if(sub==='create')initCreateWO(); if(sub==='all')renderWOAll();
   if(sub==='prod')renderProduction(); if(sub==='inv')renderDocTab('invoice'); if(sub==='tally')renderDocTab('tally');
+  if(sub==='pending')renderPendingSO(); if(sub==='create')showSOLink(); pendingBadge();
 }
 function initCreateWO(){
   // brand dropdown
@@ -1520,13 +1567,16 @@ function saveWO(){
     save();toast("Work order "+ex.num+" updated");editingWO=null;
   } else {
     if(DB.orders.length>=2000){alert("Storage limit of 2000 work orders reached. Export & archive older ones.");return;}
-    o.id=uid();o.num=woRef(DB.woSeq);o.date=today();o.createdAt=new Date().toISOString();o.createdBy=CURRENT_USER?CURRENT_USER.name:'';DB.orders.push(o);DB.woSeq++;
-    save();toast("Work order "+o.num+" created");
+    o.id=uid();o.num=woRef(DB.woSeq);o.date=today();o.createdAt=new Date().toISOString();o.createdBy=CURRENT_USER?CURRENT_USER.name:'';
+    if(SO_LINK){o.soId=SO_LINK.soId;o.soLine=SO_LINK.line;o.soNo=SO_LINK.no;}
+    DB.orders.push(o);DB.woSeq++;
+    save();toast("Work order "+o.num+" created"+(o.soNo?" for sales order "+o.soNo:""));
+    if(o.soNo)setTimeout(()=>showWO('pending'),0);
   }
   resetWOForm();
 }
 function resetWOForm(){
-  editingWO=null; curProd=null;
+  editingWO=null; curProd=null; SO_LINK=null; showSOLink();
   ['woCust','woCity','woAgent','woDelivery','woL','woW','woH'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('woQ').value=1;
   document.getElementById('woBrand').value='';document.getElementById('woModel').innerHTML='<option value="">— select model —</option>';
@@ -1540,7 +1590,7 @@ function resetWOForm(){
 }
 function editWO(id){
   const o=DB.orders.find(x=>x.id===id); if(!o)return;
-  editingWO=id; WO_SUB='create';
+  editingWO=id; WO_SUB='create'; SO_LINK=null;
   showWO('create');
   const cc=document.getElementById('woCustom');
   if(o.custom){
@@ -1576,7 +1626,7 @@ const DEL_HOURS=48;
 function recAgeH(r){const t=r.createdAt?Date.parse(r.createdAt):Date.parse((r.date||'1970-01-01')+'T00:00:00+05:30');return (Date.now()-t)/36e5;}
 function delLeftH(r){return DEL_HOURS-recAgeH(r);}
 function delBtn(type,r){
-  const left=delLeftH(r), fn={wo:'delWO',cut:'delCut',quilt:'delQuilt',ps:'delPS'}[type];
+  const left=delLeftH(r), fn={wo:'delWO',cut:'delCut',quilt:'delQuilt',ps:'delPS',so:'delSO'}[type];
   if(left>0)return `<button class="btn danger ghost sm" title="Delete completely — ${left>=1?Math.floor(left)+' h':Math.max(1,Math.round(left*60))+' min'} left" onclick='${fn}(${JSON.stringify(r.id)})'>✕</button>`;
   if(isAdmin())return `<button class="btn ghost sm" title="Older than 48 hours — admin delete" onclick='${fn}(${JSON.stringify(r.id)})'>🔒✕</button>`;
   return `<span class="tag" title="Entries can only be deleted within 48 hours of creation">🔒</span>`;
@@ -2797,7 +2847,578 @@ const ERP_COLLS=[
   ['warranty_claims','claims', o=>({id:o.id,data:o})],
 ];
 let ERP_OK=false, ERP_CACHE=null;
-function activeColls(){return ERP_OK?COLLS.concat(ERP_COLLS):COLLS;}
+const PL_SEED_ED1=[{"brand":"Napcat","model":"Eco Plus","warranty":"5-year","length":78,"thks":["3\"","4\"","5\"","6\""],"sizes":[["Single",30,[4005,4988,5971,6954]],["Single XL",36,[4805,5985,7165,8344]],["Double",42,[5606,6983,8359,9735]],["Double XL",48,[6407,7980,9553,11126]],["Queen",54,[7208,8978,10747,12516]],["Queen XL",60,[8009,9975,11941,13907]],["King",66,[8810,10973,13135,15298]],["King XL",72,[9611,11970,14329,16688]]],"rate":[246,307,367,428],"rateAbove":[274,341,408,475]},{"brand":"Napcat","model":"Toss","warranty":"10-year","length":78,"thks":["4\"","5\"","6\"","8\""],"sizes":[["Single",30,[5848,6919,7989,10204]],["Single XL",36,[7018,8303,9587,12245]],["Double",42,[8188,9686,11185,14285]],["Double XL",48,[9358,11070,12782,16326]],["Queen",54,[10527,12454,14380,18367]],["Queen XL",60,[11697,13838,15978,20408]],["King",66,[12867,15221,17576,22448]],["King XL",72,[14036,16605,19174,24489]]],"rate":[360,426,492,628],"rateAbove":[399,473,546,697]},{"brand":"Napcat","model":"Spinal Aligner","warranty":"10-year","length":78,"thks":["5\"","6\"","8\""],"sizes":[["Single",30,[7532,8583,10887]],["Single XL",36,[9038,10299,13064]],["Double",42,[10544,12016,15241]],["Double XL",48,[12051,13732,17419]],["Queen",54,[13557,15449,19596]],["Queen XL",60,[15064,17165,21773]],["King",66,[16570,18882,23951]],["King XL",72,[18076,20599,26128]]],"rate":[463,528,670],"rateAbove":[514,586,744]},{"brand":"Napcat","model":"Snuggle","warranty":"7-year","length":78,"thks":["5\"","6\"","8\""],"sizes":[["Single",30,[8315,9430,10619]],["Single XL",36,[9978,11316,12743]],["Double",42,[11641,13202,14866]],["Double XL",48,[13304,15088,16990]],["Queen",54,[14967,16973,19114]],["Queen XL",60,[16630,18859,21238]],["King",66,[18293,20745,23361]],["King XL",72,[19956,22631,25485]]],"rate":[512,580,653],"rateAbove":[568,644,725]},{"brand":"Napcat","model":"Hybrid Siesta","warranty":"7-year","length":78,"thks":["6\"","8\""],"sizes":[["Single",30,[11081,11938]],["Single XL",36,[13297,14326]],["Double",42,[15514,16713]],["Double XL",48,[17730,19101]],["Queen",54,[19946,21488]],["Queen XL",60,[22162,23876]],["King",66,[24379,26264]],["King XL",72,[26595,28651]]],"rate":[682,735],"rateAbove":[757,815]},{"brand":"Napcat","model":"Guardian","warranty":"10-year","length":78,"thks":["5\"","6\"","8\"","10\""],"sizes":[["Single",30,[10490,11560,13775,16005]],["Single XL",36,[12588,13873,16530,19206]],["Double",42,[14686,16185,19285,22407]],["Double XL",48,[16784,18497,22040,25608]],["Queen",54,[18882,20809,24795,28809]],["Queen XL",60,[20980,23121,27551,32010]],["King",66,[23078,25433,30306,35211]],["King XL",72,[25176,27745,33061,38412]]],"rate":[646,711,848,985],"rateAbove":[717,790,941,1093]},{"brand":"Napcat","model":"Empress","warranty":"8-year","length":78,"thks":["6\"","8\"","10\"","12\""],"sizes":[["Single",30,[12553,14800,17070,19339]],["Single XL",36,[15063,17760,20484,23207]],["Double",42,[17574,20721,23897,27074]],["Double XL",48,[20084,23681,27311,30942]],["Queen",54,[22595,26641,30725,34810]],["Queen XL",60,[25105,29601,34139,38678]],["King",66,[27616,32561,37553,42545]],["King XL",72,[30126,35521,40967,46413]]],"rate":[772,911,1050,1190],"rateAbove":[857,1011,1166,1321]},{"brand":"Napcat","model":"Empress +","warranty":"10-year","length":78,"thks":["6\"","8\"","10\"","12\""],"sizes":[["Single",30,[16249,18496,20766,23035]],["Single XL",36,[19498,22196,24919,27642]],["Double",42,[22748,25895,29072,32249]],["Double XL",48,[25998,29594,33225,36856]],["Queen",54,[29247,33294,37378,41463]],["Queen XL",60,[32497,36993,41531,46070]],["King",66,[35747,40692,45684,50677]],["King XL",72,[38997,44391,49838,55284]]],"rate":[1000,1138,1278,1418],"rateAbove":[1110,1263,1418,1573]},{"brand":"Napcat","model":"Legend","warranty":"10-year","length":78,"thks":["6\"","8\"","10\"","12\""],"sizes":[["Single",30,[16276,18721,21208,23695]],["Single XL",36,[19532,22465,25449,28434]],["Double",42,[22787,26209,29691,33173]],["Double XL",48,[26042,29953,33932,37912]],["Queen",54,[29297,33697,38174,42651]],["Queen XL",60,[32553,37441,42415,47390]],["King",66,[35808,41185,46657,52128]],["King XL",72,[39063,44929,50898,56867]]],"rate":[1002,1152,1305,1458],"rateAbove":[1112,1279,1449,1619]},{"brand":"Napcat","model":"Monarch","warranty":"10-year","length":78,"thks":["10\"","12\""],"sizes":[["Single",30,[26611,27552]],["Single XL",36,[31933,33063]],["Double",42,[37255,38573]],["Double XL",48,[42577,44084]],["Queen",54,[47899,49594]],["Queen XL",60,[53221,55105]],["King",66,[58543,60615]],["King XL",72,[63865,66126]]],"rate":[1638,1696],"rateAbove":[1818,1882]},{"brand":"Napcat","model":"Nirvana","warranty":"15-year","length":78,"thks":["6\"","8\""],"sizes":[["Single",30,[27209,35378]],["Single XL",36,[32651,42454]],["Double",42,[38093,49529]],["Double XL",48,[43535,56605]],["Queen",54,[48977,63680]],["Queen XL",60,[54418,70756]],["King",66,[59860,77832]],["King XL",72,[65302,84907]]],"rate":[1674,2177],"rateAbove":[1859,2417]},{"brand":"Napcat","model":"Aura Cloud","warranty":"7-year","length":78,"thks":["7\"","9\"","11\""],"sizes":[["Single",30,[14899,15748,18090]],["Single XL",36,[17879,18897,21709]],["Double",42,[20859,22047,25327]],["Double XL",48,[23838,25196,28945]],["Queen",54,[26818,28346,32563]],["Queen XL",60,[29798,31495,36181]],["King",66,[32778,34645,39799]],["King XL",72,[35758,37794,43417]]],"rate":[917,969,1113],"rateAbove":[1018,1076,1236]},{"brand":"Napcat","model":"Orion","warranty":"8-year","length":78,"thks":["7\"","9\"","11\""],"sizes":[["Single",30,[15475,16600,18943]],["Single XL",36,[18569,19920,22732]],["Double",42,[21664,23241,26520]],["Double XL",48,[24759,26561,30309]],["Queen",54,[27854,29881,34098]],["Queen XL",60,[30949,33201,37886]],["King",66,[34044,36521,41675]],["King XL",72,[37139,39841,45464]]],"rate":[952,1022,1166],"rateAbove":[1057,1134,1294]},{"brand":"Orthonap","model":"Comfort","warranty":"","length":75,"thks":["4\"","5\"","6\"","8\""],"sizes":[["Single",30,[3583,4240,4897,6231]],["Single XL",36,[4300,5088,5877,7477]],["Double",42,[5017,5936,6856,8724]],["Double XL",48,[5734,6784,7835,9970]],["Queen",54,[6450,7633,8815,11216]],["Queen XL",60,[7167,8481,9794,12462]],["King",66,[7884,9329,10774,13709]],["King XL",72,[8600,10177,11753,14955]]],"rate":[221,261,301,383],"rateAbove":[245,290,335,426]},{"brand":"Orthonap","model":"Comfort Plus","warranty":"","length":75,"thks":["4\"","5\"","6\"","8\""],"sizes":[["Single",30,[4160,4891,5530,6888]],["Single XL",36,[4992,5869,6636,8266]],["Double",42,[5824,6847,7741,9643]],["Double XL",48,[6656,7825,8847,11021]],["Queen",54,[7488,8803,9953,12398]],["Queen XL",60,[8321,9782,11059,13776]],["King",66,[9153,10760,12165,15154]],["King XL",72,[9985,11738,13271,16531]]],"rate":[256,301,340,424],"rateAbove":[284,334,378,471]},{"brand":"Orthonap","model":"Signature","warranty":"","length":75,"thks":["6\"","8\"","6\" Eurotop","8\" Eurotop"],"sizes":[["Single",30,[7126,7358,7491,7736]],["Single XL",36,[8551,8830,8989,9283]],["Double",42,[9977,10301,10487,10831]],["Double XL",48,[11402,11773,11985,12378]],["Queen",54,[12827,13244,13483,13925]],["Queen XL",60,[14252,14716,14981,15472]],["King",66,[14472,16188,16479,17020]],["King XL",72,[17103,17659,17977,18567]]],"rate":[439,453,461,476],"rateAbove":[487,503,512,528]},{"brand":"Orthonap","model":"Signature Eco","warranty":"","length":75,"thks":["6\"","8\"","6\" Eurotop","8\" Eurotop"],"sizes":[["Single",30,[6331,6562,6694,6939]],["Single XL",36,[7597,7875,8033,8327]],["Double",42,[8864,9187,9372,9714]],["Double XL",48,[10130,10500,10710,11102]],["Queen",54,[11396,11812,12049,12490]],["Queen XL",60,[12662,13125,13388,13878]],["King",66,[12857,14437,14727,15266]],["King XL",72,[15195,15749,16066,16653]]],"rate":[390,404,412,427],"rateAbove":[432,448,457,474]},{"brand":"Orthonap","model":"Aurora","warranty":"","length":75,"thks":["5\"","6\"","8\"","10\""],"sizes":[["Single",30,[9387,10401,12375,14350]],["Single XL",36,[11264,12481,14850,17220]],["Double",42,[13142,14561,17326,20090]],["Double XL",48,[15019,16641,19801,22960]],["Queen",54,[16897,18721,22276,25830]],["Queen XL",60,[18774,20801,24751,28700]],["King",66,[20651,22881,27226,31570]],["King XL",72,[22529,24961,29701,34440]]],"rate":[578,640,762,883],"rateAbove":[641,710,845,980]},{"brand":"Orthonap","model":"Aurora Pro","warranty":"","length":75,"thks":["5\"","6\"","8\"","10\""],"sizes":[["Single",30,[11190,12138,14100,15996]],["Single XL",36,[13428,14566,16920,19196]],["Double",42,[15666,16994,19740,22395]],["Double XL",48,[17904,19421,22560,25594]],["Queen",54,[20142,21849,25380,28794]],["Queen XL",60,[22380,24277,28200,31993]],["King",66,[24619,26705,31020,35192]],["King XL",72,[26857,29132,33840,38392]]],"rate":[689,747,868,984],"rateAbove":[764,829,963,1093]},{"brand":"Orthonap","model":"Italiano","warranty":"","length":75,"thks":["6\"","8\""],"sizes":[["Single",30,[26511,34204]],["Single XL",36,[31814,41045]],["Double",42,[37116,47886]],["Double XL",48,[42418,54726]],["Queen",54,[47720,61567]],["Queen XL",60,[53023,68408]],["King",66,[58325,75249]],["King XL",72,[63627,82090]]],"rate":[1631,2105],"rateAbove":[1811,2336]},{"brand":"Orthonap","model":"Nova Classic","warranty":"","length":75,"thks":["7\"","9\"","11\""],"sizes":[["Single",30,[10667,10841,10915]],["Single XL",36,[12801,13009,13098]],["Double",42,[14934,15178,15281]],["Double XL",48,[17067,17346,17464]],["Queen",54,[19201,19514,19647]],["Queen XL",60,[21334,21682,21830]],["King",66,[23468,23851,24012]],["King XL",72,[25601,26019,26195]]],"rate":[656,667,672],"rateAbove":[729,741,746]},{"brand":"Orthonap","model":"Titan","warranty":"","length":75,"thks":["6\"","8\"","10\""],"sizes":[["Single",30,[10048,11983,13992]],["Single XL",36,[12058,14380,16790]],["Double",42,[14067,16776,19588]],["Double XL",48,[16077,19173,22387]],["Queen",54,[18086,21569,25185]],["Queen XL",60,[20096,23966,27983]],["King",66,[22106,26363,30782]],["King XL",72,[24115,28759,33580]]],"rate":[618,737,861],"rateAbove":[686,819,956]},{"brand":"Orthonap","model":"Titan Pro","warranty":"","length":75,"thks":["6\"","8\"","10\""],"sizes":[["Single",30,[12236,14171,16179]],["Single XL",36,[14683,17005,19415]],["Double",42,[17130,19839,22651]],["Double XL",48,[19577,22673,25887]],["Queen",54,[22024,25507,29123]],["Queen XL",60,[24471,28342,32359]],["King",66,[26919,31176,35595]],["King XL",72,[29366,34010,38831]]],"rate":[753,872,996],"rateAbove":[836,968,1105]}];
+/* =====================================================================================
+   SALES ORDERS + PRICE LIST
+   Sales staff raise a sales order → admin approves → it appears in Workorder ▸ Pending orders
+   → Shiva creates the work order(s) → status follows the WO (production, packing slip, invoice).
+   Data lives in 2 Supabase tables (sales_orders, price_list), synced like the other tables.
+   All list prices exclude GST. Bill = MRP − item discount + extras + transport, then 18% GST.
+   ===================================================================================== */
+const SALES_COLLS=[
+  ['sales_orders','salesOrders', o=>({id:o.id,data:o})],
+  ['price_list','priceList', o=>({id:o.id,data:o})],
+];
+const GST_RATE=18;
+let SALES_OK=false, SALES_CACHE=null;
+async function loadSales(){
+  if(!sb)return;
+  const res=await Promise.all(SALES_COLLS.map(([t])=>sb.from(t).select('data')));
+  if(res.some(r=>r.error)){
+    if(SALES_CACHE){SALES_COLLS.forEach(([,k])=>DB[k]=SALES_CACHE[k]);}
+    else{SALES_OK=false; DB.salesOrders=DB.salesOrders||[]; DB.priceList=DB.priceList||[]; console.warn('Sales tables not set up yet',res.find(r=>r.error).error);}
+    return;
+  }
+  SALES_OK=true; SALES_CACHE={};
+  SALES_COLLS.forEach(([,k],i)=>{DB[k]=(res[i].data||[]).map(x=>x.data); SALES_CACHE[k]=DB[k];});
+  try{localStorage.setItem("wo_db",JSON.stringify(DB));}catch(e){}
+}
+function salesLocked(boxId){
+  if(SALES_OK)return false;
+  const b=document.getElementById(boxId);
+  if(b)b.innerHTML=`<div class="banner err" style="display:block">Sales orders need a one-time setup in Supabase. Ask the admin to run <b>sales_setup.sql</b> in Supabase → SQL Editor, then reload this page.</div>`;
+  return true;
+}
+function isSales(){return CURRENT_USER&&CURRENT_USER.role==='sales';}
+function canSell(){return !!CURRENT_USER&&['admin','office','sales'].includes(CURRENT_USER.role);}
+function rs(n){return '₹ '+Number(n||0).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2});}
+function rs0(n){return '₹ '+Math.round(Number(n||0)).toLocaleString('en-IN');}
+function r2(n){return Math.round((Number(n)||0)*100)/100;}
+function normName(s){return String(s||'').toLowerCase().replace(/\+/g,'plus').replace(/[^a-z0-9]/g,'');}
+
+/* ---------------------------- price list ---------------------------- */
+function plModels(brand){return (DB.priceList||[]).filter(p=>!brand||p.brand===brand)
+  .sort((a,b)=>(a.brand+String(a.sort||0).padStart(4,'0')+a.model).localeCompare(b.brand+String(b.sort||0).padStart(4,'0')+b.model));}
+function plById(id){return (DB.priceList||[]).find(p=>p.id===id);}
+function plBrands(){return uniq(plModels().map(p=>p.brand));}
+function thkIn(label){const n=parseFloat(String(label||'').replace(/[^0-9.]/g,''));return isFinite(n)?n:0;}
+// price per mattress (excl. GST). Standard sizes: printed price (same for lengths 72–78").
+// Custom sizes: sq.ft × rate/sq.ft (enhanced rate when longer than 78" or wider than 72").
+function plPrice(pl,sizeName,ti,L,W){
+  if(!pl||ti==null||ti<0||ti>=pl.thks.length)return {price:0,basis:''};
+  const sz=pl.sizes.find(s=>s.name===sizeName);
+  L=+L||0;
+  if(sz&&L>=72&&L<=78){const p=+sz.p[ti]||0;return {price:p,basis:`list price · ${sz.name}`};}
+  const w=sz?sz.w:(+W||0);
+  if(!(L>0&&w>0))return {price:0,basis:''};
+  const big=L>78||w>72, rate=+(big?pl.rateAbove[ti]:pl.rate[ti])||0, sqft=L*w/144;
+  return {price:Math.round(sqft*rate),basis:`${fmt(sqft,2)} sq.ft × ₹${rate}${big?' (above 78×72 rate)':''}`};
+}
+function seedPriceList(){
+  const now=nowISO(), by=CURRENT_USER?CURRENT_USER.name:'';
+  return PL_SEED_ED1.map((m,i)=>({id:'pl_'+normName(m.brand)+'_'+normName(m.model),brand:m.brand,model:m.model,warranty:m.warranty,
+    length:m.length,thks:m.thks.slice(),sizes:m.sizes.map(([name,w,p])=>({name,w,p:p.slice()})),rate:m.rate.slice(),rateAbove:m.rateAbove.slice(),
+    edition:'Edition 1',sort:i,active:true,updatedAt:now,updatedBy:by}));
+}
+function importEd1(){
+  if(salesLocked('plBody'))return;
+  const have=(DB.priceList||[]).length;
+  if(have&&!confirm(`This replaces the prices of the ${PL_SEED_ED1.length} Edition 1 models with the printed Edition 1 prices.\nModels you added yourself are kept. Continue?`))return;
+  const seed=seedPriceList();
+  seed.forEach(s=>{const i=DB.priceList.findIndex(p=>p.id===s.id); if(i>=0)DB.priceList[i]=s; else DB.priceList.push(s);});
+  save(); renderPriceList(); toast(`Price list imported — ${seed.length} models (Napcat & Orthonap Edition 1)`);
+}
+function renderPriceList(){
+  const box=document.getElementById('plBody'); if(!box)return;
+  if(salesLocked('plBody'))return;
+  const bf=(document.getElementById('plBrand')||{}).value||'';
+  const bSel=document.getElementById('plBrand');
+  if(bSel){const bs=plBrands(); bSel.innerHTML='<option value="">All brands</option>'+bs.map(b=>`<option ${b===bf?'selected':''}>${escH(b)}</option>`).join('');}
+  const list=plModels(bf);
+  const co=DB.settings.company||{};
+  document.getElementById('plCo').innerHTML=`<b>${escH(co.name||'Napcat & Orthonap')}</b> <span class="tag">${escH([co.addr,co.phone,co.gstin?'GSTIN '+co.gstin:''].filter(Boolean).join(' · ')||'set the name, address & GSTIN printed on sales order PDFs')}</span>`;
+  if(!list.length){box.innerHTML=`<div style="padding:16px"><p class="muted small">No price list yet.</p>
+    <button class="btn g" onclick="importEd1()">⬇ Import Edition 1 price lists (Napcat + Orthonap)</button></div>`;return;}
+  box.innerHTML=`<table class="oneline"><thead><tr><th>Brand</th><th>Model</th><th>Warranty</th><th>Thickness</th>
+    <th class="num">Single (lowest)</th><th class="num">King XL (highest)</th><th class="num">Rate / sq.ft</th><th>Updated</th><th class="num"></th></tr></thead><tbody>`+
+    list.map(p=>{const s0=p.sizes[0]||{p:[]}, sN=p.sizes[p.sizes.length-1]||{p:[]};
+      return `<tr style="${p.active===false?'opacity:.5':''}"><td>${escH(p.brand)}</td><td><b>${escH(p.model)}</b>${p.active===false?' <span class="pill pend">hidden</span>':''}</td>
+      <td>${escH(p.warranty||'-')}</td><td>${p.thks.map(escH).join(', ')}</td>
+      <td class="num">${rs0(Math.min(...s0.p.filter(x=>x>0)))}</td><td class="num">${rs0(Math.max(...sN.p.filter(x=>x>0)))}</td>
+      <td class="num">${p.rate.join(' / ')}</td><td>${escH((p.updatedAt||'').slice(0,10))}</td>
+      <td class="num acts"><button class="btn ghost sm" onclick='plModal(${JSON.stringify(p.id)})'>View / edit</button></td></tr>`;}).join('')+`</tbody></table>`;
+}
+let PLE=null;
+function plModal(id){
+  const p=id?plById(id):{id:null,brand:(document.getElementById('plBrand')||{}).value||'Napcat',model:'',warranty:'',length:78,
+    thks:['6"','8"'],sizes:[['Single',30],['Single XL',36],['Double',42],['Double XL',48],['Queen',54],['Queen XL',60],['King',66],['King XL',72]].map(([name,w])=>({name,w,p:[0,0]})),
+    rate:[0,0],rateAbove:[0,0],active:true};
+  PLE=JSON.parse(JSON.stringify(p)); drawPL();
+}
+function drawPL(){
+  const p=PLE, ro=!isAdmin();
+  const th=p.thks.map((t,k)=>`<th class="num"><input value="${escH(t)}" style="width:92px;text-align:right" ${ro?'disabled':''} oninput="PLE.thks[${k}]=this.value">
+      ${ro||p.thks.length<2?'':`<button class="btn danger ghost sm" title="Remove this thickness" onclick="plDelThk(${k})">✕</button>`}</th>`).join('');
+  const cell=(arr,k,path)=>`<td class="num"><input type="number" min="0" step="1" style="width:92px;text-align:right" value="${arr[k]||''}" ${ro?'disabled':''} oninput="${path}[${k}]=+this.value||0"></td>`;
+  openModal(`<div class="row"><b style="font-size:16px">${p.id?'Price list — '+escH(p.brand+' '+p.model):'New price list model'}</b><div class="spacer"></div>
+      <button class="btn ghost sm" onclick="closeModal()">${ro?'Close':'Cancel'}</button></div>
+    <div class="grid g4" style="margin-top:12px">
+      <div><label class="f">Brand</label><input id="pleBrand" value="${escH(p.brand)}" ${ro?'disabled':''} list="plBrandDL"><datalist id="plBrandDL">${plBrands().map(b=>`<option value="${escH(b)}">`).join('')}</datalist></div>
+      <div><label class="f">Model</label><input id="pleModel" value="${escH(p.model)}" ${ro?'disabled':''}></div>
+      <div><label class="f">Warranty</label><input id="pleWar" value="${escH(p.warranty||'')}" placeholder="e.g. 10-year" ${ro?'disabled':''}></div>
+      <div><label class="f">Printed length (in)</label><input id="pleLen" type="number" value="${p.length||78}" ${ro?'disabled':''}></div>
+    </div>
+    <p class="hint">All prices are per mattress, <b>without GST</b>. The printed price applies to lengths from 72" to 78". Other sizes are priced as sq.ft × rate; above 78"×72" uses the enhanced rate.</p>
+    <div style="overflow:auto;margin-top:8px"><table><thead><tr><th>Size</th><th class="num">Width</th>${th}
+      ${ro?'':'<th><button class="btn ghost sm" onclick="plAddThk()">＋ Thickness</button></th>'}</tr></thead><tbody>
+      ${p.sizes.map((s,i)=>`<tr><td><b>${escH(s.name)}</b></td><td class="num">${s.w}"</td>${p.thks.map((t,k)=>cell(s.p,k,`PLE.sizes[${i}].p`)).join('')}</tr>`).join('')}
+      <tr><td><b>Rate / sq.ft</b></td><td></td>${p.thks.map((t,k)=>cell(p.rate,k,'PLE.rate')).join('')}</tr>
+      <tr><td><b>Rate / sq.ft — above 78"×72"</b></td><td></td>${p.thks.map((t,k)=>cell(p.rateAbove,k,'PLE.rateAbove')).join('')}</tr>
+    </tbody></table></div>
+    ${p.updatedAt?`<p class="tag" style="margin-top:6px">Last updated ${escH(p.updatedAt.slice(0,16).replace('T',' '))} by ${escH(p.updatedBy||'-')}</p>`:''}
+    ${ro?'':`<div class="divider"></div><div class="row">
+      ${p.id?`<button class="btn danger ghost sm" onclick='delPL(${JSON.stringify(p.id)})'>Delete model</button>`:''}
+      <label class="row small muted" style="gap:6px;cursor:pointer"><input type="checkbox" id="pleAct" style="width:auto" ${p.active!==false?'checked':''}> Available for new sales orders</label>
+      <div class="spacer"></div><button class="btn g" onclick="commitPL()">Save prices</button></div>`}`);
+}
+function plSync(){const v=id=>document.getElementById(id).value.trim();
+  PLE.brand=v('pleBrand');PLE.model=v('pleModel');PLE.warranty=v('pleWar');PLE.length=+v('pleLen')||78;
+  const a=document.getElementById('pleAct'); if(a)PLE.active=a.checked;}
+function plAddThk(){plSync();PLE.thks.push('');PLE.sizes.forEach(s=>s.p.push(0));PLE.rate.push(0);PLE.rateAbove.push(0);drawPL();}
+function plDelThk(k){plSync();PLE.thks.splice(k,1);PLE.sizes.forEach(s=>s.p.splice(k,1));PLE.rate.splice(k,1);PLE.rateAbove.splice(k,1);drawPL();}
+function commitPL(){
+  plSync(); const p=PLE;
+  if(!p.brand||!p.model){alert('Enter the brand and model.');return;}
+  p.thks=p.thks.map(t=>t.trim()); if(p.thks.some(t=>!t)){alert('Every thickness column needs a label, e.g. 6" or 8" Eurotop.');return;}
+  if(new Set(p.thks).size!==p.thks.length){alert('Two thickness columns have the same label.');return;}
+  if((DB.priceList||[]).some(x=>x.id!==p.id&&x.brand.toLowerCase()===p.brand.toLowerCase()&&x.model.toLowerCase()===p.model.toLowerCase())){alert('This brand already has a model with that name.');return;}
+  const blanks=p.sizes.reduce((n,s)=>n+s.p.filter(x=>!(x>0)).length,0);
+  if(blanks&&!confirm(`${blanks} price cell(s) are empty or 0 — those sizes can't be sold until a price is entered. Save anyway?`))return;
+  p.updatedAt=nowISO(); p.updatedBy=CURRENT_USER?CURRENT_USER.name:'';
+  if(p.id){const i=DB.priceList.findIndex(x=>x.id===p.id); DB.priceList[i]=p;}
+  else{p.id='pl_'+uid(); p.edition='Custom'; p.sort=999; DB.priceList.push(p);}
+  save(); closeModal(); renderPriceList(); toast(`Prices saved — ${p.brand} ${p.model}`);
+}
+function delPL(id){const p=plById(id); if(!p)return;
+  if(!confirm(`Delete ${p.brand} ${p.model} from the price list?\nExisting sales orders keep their prices.`))return;
+  DB.priceList=DB.priceList.filter(x=>x.id!==id); save(); closeModal(); renderPriceList(); toast(`${p.brand} ${p.model} removed from the price list`);}
+function companyModal(){
+  const c=DB.settings.company||{};
+  openModal(`<div class="row"><b style="font-size:16px">Company details on sales order PDF</b><div class="spacer"></div><button class="btn ghost sm" onclick="closeModal()">Cancel</button></div>
+    <div class="grid g2" style="margin-top:12px">
+      <div><label class="f">Company name</label><input id="coName" value="${escH(c.name||'Napcat & Orthonap')}"></div>
+      <div><label class="f">GSTIN</label><input id="coGst" value="${escH(c.gstin||'')}"></div>
+      <div><label class="f">Address</label><input id="coAddr" value="${escH(c.addr||'Erode, Tamil Nadu')}"></div>
+      <div><label class="f">Phone / email</label><input id="coPh" value="${escH(c.phone||'')}"></div>
+      <div style="grid-column:1/-1"><label class="f">Bank details / note printed at the bottom (optional)</label><textarea id="coNote" rows="2">${escH(c.note||'')}</textarea></div>
+    </div><div class="divider"></div><div class="row"><div class="spacer"></div><button class="btn g" onclick="commitCompany()">Save</button></div>`);
+}
+function commitCompany(){const v=id=>document.getElementById(id).value.trim();
+  DB.settings.company={name:v('coName'),gstin:v('coGst'),addr:v('coAddr'),phone:v('coPh'),note:v('coNote')};
+  save(); closeModal(); renderPriceList(); toast('Company details saved');}
+
+/* ---------------------------- totals & status ---------------------------- */
+const PAY_TERMS=['100% advance with order','50% advance, balance before dispatch','Advance, balance on delivery','Credit — 15 days','Credit — 30 days','Credit — 45 days','Other (see note)'];
+const TRANSPORT={included:'Included in price',extra:'Extra — charged on this bill',topay:'Not included — customer pays transporter (to-pay)'};
+function soItemCalc(it){const gross=r2((+it.mrp||0)*(+it.qty||0)), disc=r2(gross*Math.min(100,Math.max(0,+it.discPct||0))/100);
+  return {gross,disc,net:r2(gross-disc)};}
+function soTotals(so){
+  const lines=(so.items||[]).map(soItemCalc);
+  const gross=r2(lines.reduce((s,l)=>s+l.gross,0)), disc=r2(lines.reduce((s,l)=>s+l.disc,0)), itemsNet=r2(gross-disc);
+  const extras=r2((so.extras||[]).reduce((s,e)=>s+(+e.amount||0),0));
+  const tr=so.transport||{}, transport=tr.mode==='extra'?r2(+tr.charge||0):0;
+  const taxable=r2(itemsNet+extras+transport), gst=r2(taxable*GST_RATE/100), total=r2(taxable+gst), grand=Math.round(total);
+  return {lines,gross,disc,itemsNet,extras,transport,taxable,gst,total,grand,roundOff:r2(grand-total)};
+}
+function soNo(so){return so.no||'SO-?';}
+function soById(id){return (DB.salesOrders||[]).find(s=>s.id===id);}
+function soWOs(so,line){return DB.orders.filter(o=>o.soId===so.id&&(line==null||o.soLine===line));}
+function itemDesc(it){
+  const size=`${fmt(it.L,2)}×${fmt(it.W,2)}×${fmt(it.H,2)}"`;
+  return it.type==='custom'?`Custom mattress · ${size}`:`${it.brand} ${it.model} · ${it.sizeName==='Custom'?'Custom size':it.sizeName} · ${it.thk} · ${size}`;
+}
+// stage of one sales order line, from its work orders
+const SO_STAGES=['Awaiting WO','WO created','In production','Ready','Part packed','Packed','Invoiced'];
+function soLineStage(so,idx){
+  const it=so.items[idx], wos=soWOs(so,idx), need=+it.qty||0;
+  if(!wos.length)return {rank:0,woQ:0,packed:0,wos,short:need};
+  let woQ=0,packed=0,made=0,started=false;
+  wos.forEach(o=>{const p=woProgress(o); woQ+=+o.Q||0; packed+=p.disp; made+=p.made; if(p.issued||p.made>0)started=true;});
+  const inv=wos.every(o=>docsFor(o.id,'invoice').length);
+  let rank=1;
+  if(packed>=need&&need>0)rank=inv?6:5; else if(packed>0)rank=4; else if(made>=need&&need>0)rank=3; else if(started||made>0)rank=2;
+  return {rank,woQ,packed,wos,short:Math.max(0,need-woQ)};
+}
+function soStatus(so){
+  if(so.status==='pending')return {l:'Pending approval',c:'pend',rank:-1};
+  if(so.status==='rejected')return {l:'Rejected',c:'crit',rank:-2};
+  if(so.status==='cancelled')return {l:'Cancelled',c:'crit',rank:-3};
+  const st=(so.items||[]).map((_,i)=>soLineStage(so,i));
+  const lo=Math.min(...st.map(s=>s.rank)), hi=Math.max(...st.map(s=>s.rank));
+  let l=lo===0?(hi>0?'Approved · WO in progress':'Approved · awaiting WO'):SO_STAGES[lo];
+  if(lo>0&&hi>lo)l+=' (some items ahead)';
+  return {l,c:lo>=5?'ok':lo>=2?'low':'pend',rank:lo};
+}
+function soPending(){return (DB.salesOrders||[]).filter(s=>s.status==='approved'&&(s.items||[]).some((it,i)=>soLineStage(s,i).short>0));}
+
+/* ---------------------------- list ---------------------------- */
+let SALES_SUB='list';
+function renderSales(){showSales(SALES_SUB);}
+function showSales(sub){
+  if(sub==='new'&&!canSell())sub='list';
+  SALES_SUB=sub;
+  document.querySelectorAll('#salesTabs button').forEach(b=>b.classList.toggle('active',b.dataset.s===sub));
+  document.querySelectorAll('.salesSub').forEach(d=>d.style.display='none');
+  document.getElementById('salesSub-'+sub).style.display='block';
+  const nb=document.querySelector('#salesTabs button[data-s="new"]'); if(nb)nb.style.display=canSell()?'':'none';
+  if(sub==='list')renderSOList(); if(sub==='new')renderSOForm();
+}
+function visibleSOs(){return (DB.salesOrders||[]).filter(s=>!isSales()||s.createdById===CURRENT_USER.id);}
+function renderSOList(){
+  if(salesLocked('soBody'))return;
+  const f=(document.getElementById('soF').value||'').trim().toLowerCase(), fs=document.getElementById('soS').value;
+  const all=visibleSOs().slice().sort((a,b)=>(b.createdAt||'').localeCompare(a.createdAt||''));
+  const rows=all.map(s=>({s,st:soStatus(s),t:soTotals(s)})).filter(({s,st})=>
+    (!f||[s.no,s.cust&&s.cust.name,s.cust&&s.cust.city,s.cust&&s.cust.phone,s.createdBy,...(s.items||[]).map(itemDesc)].join(' ').toLowerCase().includes(f))&&
+    (!fs||(fs==='pending'?s.status==='pending':fs==='rejected'?['rejected','cancelled'].includes(s.status):fs==='open'?(s.status==='approved'&&st.rank<5):fs==='done'?(s.status==='approved'&&st.rank>=5):true)));
+  const pend=all.filter(s=>s.status==='pending').length;
+  document.getElementById('soKpi').innerHTML=`<span class="chip">${all.length} sales orders</span>
+    ${pend?`<span class="pill pend" style="cursor:pointer" onclick="document.getElementById('soS').value='pending';renderSOList()">${pend} waiting for admin approval</span>`:''}`;
+  document.getElementById('soBody').innerHTML=rows.length?`<table class="oneline"><thead><tr><th>SO #</th><th>Date</th><th>Customer</th><th>City</th><th>Items</th>
+    <th class="num">Qty</th><th class="num">Total (incl. GST)</th><th>Sales person</th><th>Work orders</th><th>Status</th><th class="num"></th></tr></thead><tbody>`+
+    rows.map(({s,st,t})=>{const wos=soWOs(s), q=(s.items||[]).reduce((a,i)=>a+(+i.qty||0),0);
+      const first=s.items&&s.items[0]?itemDesc(s.items[0]):'-', more=(s.items||[]).length-1;
+      return `<tr><td><b>${escH(s.no)}</b></td><td>${dmy(s.date)}</td><td class="ell" title="${escH(s.cust.name)}">${escH(s.cust.name)}</td>
+      <td class="ell">${escH(s.cust.city||'-')}</td><td class="ell" title="${escH((s.items||[]).map(itemDesc).join('\n'))}">${escH(first)}${more>0?` <span class="tag">+${more} more</span>`:''}</td>
+      <td class="num">${q}</td><td class="num"><b>${rs0(t.grand)}</b></td><td class="ell">${escH(s.createdBy||'-')}</td>
+      <td class="ell">${wos.length?wos.map(o=>escH(o.num)).join(', '):'-'}</td>
+      <td><span class="pill ${st.c}" title="${escH(s.status==='rejected'?'Reason: '+(s.rejectReason||'-'):st.l)}">${escH(st.l)}</span></td>
+      <td class="num acts"><button class="btn ghost sm" onclick='viewSO(${JSON.stringify(s.id)})'>View</button>
+        ${isAdmin()&&s.status==='pending'?`<button class="btn g sm" onclick='viewSO(${JSON.stringify(s.id)})'>Approve…</button>`:''}
+        <button class="btn ghost sm" title="Download PDF" onclick='soPDF(${JSON.stringify(s.id)})'>⬇ PDF</button>
+        ${soCanEdit(s)?`<button class="btn ghost sm" onclick='editSO(${JSON.stringify(s.id)})'>Edit</button>`:''}
+        ${soCanDel(s)?delBtn('so',s):''}</td></tr>`;}).join('')+`</tbody></table>`
+    :`<p class="muted small" style="padding:14px">${all.length?'No sales orders match.':'No sales orders yet.'+(canSell()?' Click “＋ New sales order” to raise one.':'')}</p>`;
+}
+function soMine(s){return CURRENT_USER&&s.createdById===CURRENT_USER.id;}
+function soCanEdit(s){if(!canSell())return false; if(soWOs(s).length)return false;
+  if(isAdmin())return s.status!=='cancelled'; return soMine(s)&&['pending','rejected'].includes(s.status);}
+function soCanDel(s){return !soWOs(s).length&&(isAdmin()||(soMine(s)&&s.status!=='approved'));}
+function delSO(id){const s=soById(id); if(!s)return;
+  if(soWOs(s).length){alert(`${s.no} already has work orders, so it can't be deleted.`);return;}
+  if(!delAllowed(s,'Sales order '+s.no))return;
+  if(delLeftH(s)>0&&!confirm(`Delete sales order ${s.no} (${s.cust.name}) completely?`))return;
+  DB.salesOrders=DB.salesOrders.filter(x=>x.id!==id); save(); closeModal(); renderSOList(); toast(`Sales order ${s.no} deleted`);}
+
+/* ---------------------------- view / approve ---------------------------- */
+function soSummaryHTML(s){
+  const t=soTotals(s), tr=s.transport||{}, pay=s.payment||{};
+  const items=(s.items||[]).map((it,i)=>{const c=t.lines[i], g=s.status==='approved'?soLineStage(s,i):null;
+    return `<tr><td>${i+1}</td><td class="wrap"><b>${escH(it.type==='custom'?'Custom mattress':it.brand+' '+it.model)}</b>
+      <div class="small">${escH(it.type==='custom'?'':(it.sizeName==='Custom'?'Custom size':it.sizeName)+' · '+it.thk+' · ')}${fmt(it.L,2)}×${fmt(it.W,2)}×${fmt(it.H,2)} in${it.priceBasis?` <span class="tag">${escH(it.priceBasis)}</span>`:''}</div>
+      ${it.desc?`<div class="small" style="white-space:pre-wrap;color:var(--txt);margin-top:3px">📝 ${escH(it.desc)}</div>`:''}</td>
+      <td class="num">${it.qty}</td><td class="num" style="white-space:nowrap">${rs(it.mrp)}</td><td class="num">${+it.discPct?fmt(it.discPct,2)+'%':'-'}</td><td class="num" style="white-space:nowrap">${rs(c.net)}</td>
+      ${g?`<td>${g.wos.length?g.wos.map(o=>`<a href="#" onclick='closeModal();viewWO(${JSON.stringify(o.id)});return false'>${escH(o.num)}</a>`).join(', '):'-'}<br><span class="pill ${g.rank>=5?'ok':g.rank>=2?'low':'pend'}">${SO_STAGES[g.rank]}</span>${g.packed?` <span class="tag">packed ${g.packed}/${it.qty}</span>`:''}</td>`:''}</tr>`;}).join('');
+  const ex=(s.extras||[]).map(e=>`<tr><td class="wrap">${escH(e.desc)}</td><td class="num">${rs(e.amount)}</td></tr>`).join('');
+  return `<div class="grid g2" style="margin-top:10px">
+      <div class="kpi"><div class="l">Customer</div><b>${escH(s.cust.name)}</b><div class="small">${escH([s.cust.phone,s.cust.city].filter(Boolean).join(' · '))}</div>
+        ${s.cust.addr?`<div class="small" style="white-space:pre-wrap">${escH(s.cust.addr)}</div>`:''}${s.cust.gstin?`<div class="small">GSTIN ${escH(s.cust.gstin)}</div>`:''}</div>
+      <div class="kpi"><div class="l">Order</div><div class="small">Date ${dmy(s.date)}${s.reqDate?' · required by '+dmy(s.reqDate):''}</div>
+        <div class="small">Sales person: <b>${escH(s.createdBy||'-')}</b></div>
+        ${s.approvedBy?`<div class="small">Approved by ${escH(s.approvedBy)} on ${escH((s.approvedAt||'').slice(0,10))}</div>`:''}
+        ${s.status==='rejected'?`<div class="small" style="color:var(--danger)">Rejected by ${escH(s.rejectedBy||'-')}: ${escH(s.rejectReason||'-')}</div>`:''}</div>
+    </div>
+    <div style="overflow:auto;margin-top:12px"><table><thead><tr><th>#</th><th>Product</th><th class="num">Qty</th><th class="num">MRP / pc</th><th class="num">Disc.</th><th class="num">Amount</th>${s.status==='approved'?'<th>Work order · status</th>':''}</tr></thead><tbody>${items}</tbody></table></div>
+    ${ex?`<div style="overflow:auto;margin-top:10px"><table><thead><tr><th>Extras / add-ons</th><th class="num">Amount</th></tr></thead><tbody>${ex}</tbody></table></div>`:''}
+    <div class="grid g2" style="margin-top:12px">
+      <div><div class="small"><b>Payment terms:</b> ${escH(pay.terms||'-')}${+pay.advance?` · advance received ${rs(pay.advance)}`:''}</div>
+        ${pay.note?`<div class="small" style="white-space:pre-wrap">${escH(pay.note)}</div>`:''}
+        <div class="small" style="margin-top:6px"><b>Transportation:</b> ${escH(TRANSPORT[tr.mode]||'-')}${tr.mode==='extra'?' · '+rs(tr.charge):''}</div>
+        ${tr.note?`<div class="small" style="white-space:pre-wrap">${escH(tr.note)}</div>`:''}
+        ${s.remarks?`<div class="small" style="margin-top:6px;white-space:pre-wrap"><b>Remarks:</b> ${escH(s.remarks)}</div>`:''}</div>
+      <div>${soTotalsHTML(t)}</div></div>`;
+}
+function soTotalsHTML(t){
+  const r=(l,v,b)=>`<div class="row" style="justify-content:space-between;${b?'font-weight:700;font-size:15px;border-top:1px solid var(--line);padding-top:6px':''}"><span>${l}</span><span>${v}</span></div>`;
+  return `<div style="display:grid;gap:4px" class="small">${r('Items at MRP',rs(t.gross))}${t.disc?r('Less: item discounts','− '+rs(t.disc)):''}
+    ${t.extras?r('Extras / add-ons',rs(t.extras)):''}${t.transport?r('Transportation',rs(t.transport)):''}
+    ${r('Taxable value',rs(t.taxable))}${r(`GST @ ${GST_RATE}%`,rs(t.gst))}${t.roundOff?r('Round off',rs(t.roundOff)):''}${r('Total',rs(t.grand),1)}</div>`;
+}
+function viewSO(id){const s=soById(id); if(!s)return; const st=soStatus(s);
+  const wos=soWOs(s);
+  openModal(`<div class="row"><b style="font-size:16px">Sales order ${escH(s.no)}</b><span class="pill ${st.c}" style="margin-left:8px">${escH(st.l)}</span><div class="spacer"></div>
+      <button class="btn ghost sm" onclick='soPDF(${JSON.stringify(s.id)})'>⬇ PDF</button>
+      ${soCanEdit(s)?`<button class="btn ghost sm" onclick='closeModal();editSO(${JSON.stringify(s.id)})'>Edit</button>`:''}
+      <button class="btn ghost sm" onclick="closeModal()">Close</button></div>
+    ${soSummaryHTML(s)}
+    ${isAdmin()&&s.status==='pending'?`<div class="divider"></div><div class="row">
+      <input id="soRej" placeholder="Reason (needed to reject)" style="max-width:340px">
+      <button class="btn danger ghost" onclick='rejectSO(${JSON.stringify(s.id)})'>✕ Reject</button><div class="spacer"></div>
+      <button class="btn g" onclick='approveSO(${JSON.stringify(s.id)})'>✓ Approve — send to Workorder ▸ Pending orders</button></div>`:''}
+    ${isAdmin()&&s.status==='approved'&&!wos.length?`<div class="divider"></div><div class="row"><span class="tag">No work order made yet.</span><div class="spacer"></div>
+      <button class="btn ghost sm" onclick='reopenSO(${JSON.stringify(s.id)})'>↺ Move back to pending approval</button></div>`:''}
+    ${!isSales()&&s.status==='approved'&&soLinesShort(s).length?`<div class="divider"></div><div class="row"><span class="tag">${soLinesShort(s).length} item(s) still need a work order.</span><div class="spacer"></div>
+      <button class="btn sm" onclick="closeModal();go('wo');showWO('pending')">Open pending orders</button></div>`:''}
+    ${(s.log||[]).length?`<details style="margin-top:10px"><summary class="small muted">History</summary>${s.log.map(l=>`<div class="small">${escH(l.at.slice(0,16).replace('T',' '))} · ${escH(l.by)} · ${escH(l.what)}</div>`).join('')}</details>`:''}`);
+}
+function soLinesShort(s){return (s.items||[]).map((it,i)=>i).filter(i=>soLineStage(s,i).short>0);}
+function soLog(s,what){s.log=s.log||[];s.log.push({at:nowISO(),by:CURRENT_USER?CURRENT_USER.name:'',what});}
+function approveSO(id){const s=soById(id); if(!s||!isAdmin())return;
+  s.status='approved'; s.approvedBy=CURRENT_USER.name; s.approvedAt=nowISO(); delete s.rejectReason; soLog(s,'Approved');
+  save(); closeModal(); renderSales(); toast(`Sales order ${s.no} approved — now in Workorder ▸ Pending orders`);}
+function rejectSO(id){const s=soById(id); if(!s||!isAdmin())return; const r=document.getElementById('soRej').value.trim();
+  if(!r){alert('Type the reason for rejecting, so the sales person knows what to fix.');return;}
+  s.status='rejected'; s.rejectReason=r; s.rejectedBy=CURRENT_USER.name; soLog(s,'Rejected: '+r);
+  save(); closeModal(); renderSales(); toast(`Sales order ${s.no} rejected`,'err');}
+function reopenSO(id){const s=soById(id); if(!s||soWOs(s).length)return;
+  s.status='pending'; delete s.approvedBy; delete s.approvedAt; soLog(s,'Moved back to pending approval');
+  save(); closeModal(); renderSales(); toast(`Sales order ${s.no} is back in pending approval`);}
+
+/* ---------------------------- create / edit form ---------------------------- */
+let SOF=null, SO_EDIT=null;
+function blankSO(){return {cust:{name:'',phone:'',city:'',addr:'',gstin:''},reqDate:'',items:[blankItem()],extras:[],
+  payment:{terms:PAY_TERMS[1],advance:'',note:''},transport:{mode:'included',charge:'',note:''},remarks:''};}
+function blankItem(type){const b=plBrands()[0]||'';
+  return {type:type||'catalog',brand:b,plId:'',model:'',sizeName:'',thk:'',ti:-1,L:'',W:'',H:'',qty:1,mrp:0,discPct:0,desc:''};}
+function editSO(id){const s=soById(id); if(!s||!soCanEdit(s))return;
+  SO_EDIT=id; SOF=JSON.parse(JSON.stringify(s)); SALES_SUB='new'; go('sales');}
+function newSO(){SO_EDIT=null; SOF=blankSO(); showSales('new');}
+function renderSOForm(){
+  if(salesLocked('soForm'))return;
+  if(!SOF)SOF=blankSO();
+  if(!(DB.priceList||[]).length){document.getElementById('soForm').innerHTML=`<div class="banner err" style="display:block">The price list is empty. ${isAdmin()?'Go to Admin Control ▸ Price list and import or enter prices first.':'Ask the admin to load the price list first.'}</div>`;return;}
+  const s=SOF, ed=SO_EDIT?soById(SO_EDIT):null;
+  const custs=uniq((DB.salesOrders||[]).map(x=>x.cust&&x.cust.name));
+  document.getElementById('soForm').innerHTML=`
+    <div class="card"><div class="row"><b>${ed?'Editing '+escH(ed.no):'New sales order'}</b><span class="chip">${ed?escH(ed.no):'SO #: '+seqRef('SO-',DB.soSeq)+' (auto)'}</span><span class="chip">📅 ${dmy(ed?ed.date:today())}</span>
+      ${ed&&ed.status==='rejected'?`<span class="pill crit">Rejected: ${escH(ed.rejectReason||'')}</span>`:''}</div>
+      <div class="grid g3" style="margin-top:12px">
+        <div><label class="f">Customer / dealer name *</label><input value="${escH(s.cust.name)}" list="soCustDL" oninput="SOF.cust.name=this.value;soFillCust(this.value)"><datalist id="soCustDL">${custs.map(c=>`<option value="${escH(c)}">`).join('')}</datalist></div>
+        <div><label class="f">Phone</label><input id="soPh" value="${escH(s.cust.phone)}" oninput="SOF.cust.phone=this.value"></div>
+        <div><label class="f">City / delivery place</label><input id="soCity" value="${escH(s.cust.city)}" oninput="SOF.cust.city=this.value"></div>
+        <div><label class="f">Address</label><input id="soAddr" value="${escH(s.cust.addr)}" oninput="SOF.cust.addr=this.value"></div>
+        <div><label class="f">Customer GSTIN (optional)</label><input id="soGst" value="${escH(s.cust.gstin)}" oninput="SOF.cust.gstin=this.value"></div>
+        <div><label class="f">Required by (optional)</label><input type="date" value="${escH(s.reqDate||'')}" oninput="SOF.reqDate=this.value"></div>
+      </div></div>
+    <div class="card"><div class="row"><b>Mattresses</b><span class="tag">prices come from the price list (without GST)</span><div class="spacer"></div>
+        <button class="btn sm" onclick="soAddItem('catalog')">＋ Product from price list</button>
+        <button class="btn ghost sm" onclick="soAddItem('custom')">＋ Custom mattress</button></div>
+      <div id="soItems" style="margin-top:10px">${s.items.map((it,i)=>soItemHTML(it,i)).join('')||'<p class="muted small">No items yet.</p>'}</div></div>
+    <div class="card"><div class="row"><b>Extras / add-ons</b><span class="tag">e.g. special fabric on top — describe it and enter the cost agreed with the client (without GST)</span><div class="spacer"></div>
+        <button class="btn ghost sm" onclick="soAddExtra()">＋ Add extra</button></div>
+      <div style="margin-top:8px">${s.extras.map((e,k)=>`<div class="row" style="margin-bottom:6px;flex-wrap:nowrap">
+        <input style="flex:1" placeholder="What exactly — e.g. 350 GSM knitted fabric on top for item 1" value="${escH(e.desc)}" oninput="SOF.extras[${k}].desc=this.value">
+        <input type="number" min="0" step="1" style="max-width:150px" placeholder="₹ amount" value="${e.amount===''?'':e.amount}" oninput="SOF.extras[${k}].amount=this.value===''?'':+this.value;soRefreshTotals()">
+        <button class="btn danger ghost sm" onclick="SOF.extras.splice(${k},1);renderSOForm()">✕</button></div>`).join('')||'<p class="muted small">None.</p>'}</div></div>
+    <div class="grid g2">
+      <div class="card"><b>Payment terms</b>
+        <div class="grid g2" style="margin-top:10px">
+          <div><label class="f">Terms</label><select onchange="SOF.payment.terms=this.value">${PAY_TERMS.map(p=>`<option ${p===s.payment.terms?'selected':''}>${escH(p)}</option>`).join('')}</select></div>
+          <div><label class="f">Advance received (₹, optional)</label><input type="number" min="0" value="${escH(s.payment.advance)}" oninput="SOF.payment.advance=this.value"></div>
+          <div style="grid-column:1/-1"><label class="f">Payment note</label><input value="${escH(s.payment.note)}" placeholder="e.g. cheque on delivery, UPI ref…" oninput="SOF.payment.note=this.value"></div>
+        </div></div>
+      <div class="card"><b>Transportation</b>
+        <div style="margin-top:10px;display:grid;gap:6px">${Object.entries(TRANSPORT).map(([k,l])=>`<label class="row small" style="gap:6px;cursor:pointer;flex-wrap:nowrap"><input type="radio" name="soTr" style="width:auto" ${s.transport.mode===k?'checked':''} onchange="SOF.transport.mode='${k}';renderSOForm()"> ${escH(l)}</label>`).join('')}</div>
+        <div class="grid g2" style="margin-top:8px">
+          ${s.transport.mode==='extra'?`<div><label class="f">Transport charge (₹, without GST)</label><input type="number" min="0" value="${escH(s.transport.charge)}" oninput="SOF.transport.charge=this.value;soRefreshTotals()"></div>`:''}
+          <div style="${s.transport.mode==='extra'?'':'grid-column:1/-1'}"><label class="f">Transport note</label><input value="${escH(s.transport.note)}" placeholder="transporter, vehicle, destination…" oninput="SOF.transport.note=this.value"></div>
+        </div></div>
+    </div>
+    <div class="grid g2">
+      <div class="card"><label class="f">Remarks for admin / factory</label><textarea rows="4" oninput="SOF.remarks=this.value">${escH(s.remarks)}</textarea></div>
+      <div class="card"><b>Bill summary</b><div id="soTot" style="margin-top:10px"></div></div>
+    </div>
+    <div class="row" style="margin-bottom:24px"><button class="btn ghost" onclick="soCancelForm()">Cancel</button><div class="spacer"></div>
+      <button class="btn g" onclick="commitSO()">${ed&&ed.status==='approved'?'Save changes':'Submit for approval'}</button></div>`;
+  soRefreshTotals();
+}
+function soFillCust(name){const p=(DB.salesOrders||[]).slice().reverse().find(x=>x.cust&&x.cust.name===name); if(!p)return;
+  ['phone','city','addr','gstin'].forEach(k=>{if(!SOF.cust[k]&&p.cust[k]){SOF.cust[k]=p.cust[k];}});
+  document.getElementById('soPh').value=SOF.cust.phone||'';document.getElementById('soCity').value=SOF.cust.city||'';
+  document.getElementById('soAddr').value=SOF.cust.addr||'';document.getElementById('soGst').value=SOF.cust.gstin||'';}
+function soItemHTML(it,i){
+  const c=soItemCalc(it);
+  const head=`<div class="row" style="margin-bottom:8px"><b>Item ${i+1}</b><span class="chip">${it.type==='custom'?'🧩 Custom mattress':'📗 Price list'}</span><div class="spacer"></div>
+    <span class="small">Amount: <b id="soAmt_${i}">${rs(c.net)}</b></span>
+    <button class="btn danger ghost sm" onclick="SOF.items.splice(${i},1);renderSOForm()">✕</button></div>`;
+  const qd=`<div><label class="f">Quantity</label><input type="number" min="1" step="1" value="${it.qty}" oninput="SOF.items[${i}].qty=+this.value||0;soRefreshTotals()"></div>
+    <div><label class="f">Discount % (on MRP)</label><input type="number" min="0" max="100" step="0.5" value="${it.discPct||''}" placeholder="0" oninput="SOF.items[${i}].discPct=+this.value||0;soRefreshTotals()"></div>`;
+  if(it.type==='custom'){
+    return `<div class="lncard">${head}
+      <label class="f">Describe exactly what the customer wants *</label>
+      <textarea rows="3" placeholder="Layers, foam / latex, springs, fabric, quilting, border, anything special…" oninput="SOF.items[${i}].desc=this.value">${escH(it.desc)}</textarea>
+      <div class="grid g4" style="margin-top:8px">
+        <div><label class="f">Length (in)</label><input type="number" step="0.5" value="${it.L}" oninput="SOF.items[${i}].L=+this.value||''"></div>
+        <div><label class="f">Breadth (in)</label><input type="number" step="0.5" value="${it.W}" oninput="SOF.items[${i}].W=+this.value||''"></div>
+        <div><label class="f">Height (in)</label><input type="number" step="0.5" value="${it.H}" oninput="SOF.items[${i}].H=+this.value||''"></div>
+        <div><label class="f">Price per mattress (₹, without GST)</label><input type="number" min="0" step="1" value="${it.mrp||''}" oninput="SOF.items[${i}].mrp=+this.value||0;soRefreshTotals()"></div>
+        ${qd}</div></div>`;
+  }
+  const brands=plBrands(), models=plModels(it.brand).filter(p=>p.active!==false||p.id===it.plId), pl=plById(it.plId);
+  const sizes=pl?pl.sizes:[];
+  return `<div class="lncard">${head}
+    <div class="grid g4">
+      <div><label class="f">Brand</label><select onchange="soSetBrand(${i},this.value)">${brands.map(b=>`<option ${b===it.brand?'selected':''}>${escH(b)}</option>`).join('')}</select></div>
+      <div><label class="f">Model</label><select onchange="soSetModel(${i},this.value)"><option value="">— select model —</option>${models.map(p=>`<option value="${p.id}" ${p.id===it.plId?'selected':''}>${escH(p.model)}${p.warranty?' · '+escH(p.warranty):''}</option>`).join('')}</select></div>
+      <div><label class="f">Size</label><select ${pl?'':'disabled'} onchange="soSetSize(${i},this.value)"><option value="">— size —</option>${sizes.map(z=>`<option value="${escH(z.name)}" ${z.name===it.sizeName?'selected':''}>${escH(z.name)} (${pl.length}×${z.w})</option>`).join('')}<option value="Custom" ${it.sizeName==='Custom'?'selected':''}>Custom size…</option></select></div>
+      <div><label class="f">Thickness</label><select ${pl?'':'disabled'} onchange="soSetThk(${i},this.value)"><option value="">— thickness —</option>${pl?pl.thks.map((t,k)=>`<option value="${k}" ${k===it.ti?'selected':''}>${escH(t)}</option>`).join(''):''}</select></div>
+      <div><label class="f">Length (in)</label><input type="number" step="0.5" value="${it.L}" ${pl?'':'disabled'} oninput="SOF.items[${i}].L=+this.value||'';soReprice(${i})"></div>
+      <div><label class="f">Breadth (in)</label><input type="number" step="0.5" value="${it.W}" ${it.sizeName==='Custom'?'':'disabled'} oninput="SOF.items[${i}].W=+this.value||'';soReprice(${i})"></div>
+      ${qd}
+    </div>
+    <div class="row small" style="margin-top:6px"><span>MRP per mattress: <b id="soMrp_${i}">${it.mrp?rs(it.mrp):'—'}</b></span><span class="tag" id="soBasis_${i}">${escH(it.priceBasis||'')}</span></div>
+    <label class="f" style="margin-top:6px">Notes for this item (optional)</label><input value="${escH(it.desc)}" placeholder="anything the factory should know" oninput="SOF.items[${i}].desc=this.value">
+  </div>`;
+}
+function soAddItem(type){SOF.items.push(blankItem(type));renderSOForm();}
+function soAddExtra(){SOF.extras.push({desc:'',amount:''});renderSOForm();}
+function soSetBrand(i,b){Object.assign(SOF.items[i],{brand:b,plId:'',model:'',sizeName:'',ti:-1,thk:'',mrp:0,priceBasis:''});renderSOForm();}
+function soSetModel(i,id){const it=SOF.items[i], pl=plById(id); Object.assign(it,{plId:id,model:pl?pl.model:'',ti:-1,thk:'',warranty:pl?pl.warranty:''});
+  if(pl&&it.sizeName&&it.sizeName!=='Custom'&&!pl.sizes.some(z=>z.name===it.sizeName))it.sizeName='';
+  if(pl&&!it.L)it.L=pl.length; soReprice(i,true);}
+function soSetSize(i,v){const it=SOF.items[i], pl=plById(it.plId); it.sizeName=v;
+  if(v&&v!=='Custom'){const z=pl.sizes.find(x=>x.name===v); it.W=z.w; if(!(it.L>=72&&it.L<=78))it.L=pl.length;}
+  soReprice(i,true);}
+function soSetThk(i,k){const it=SOF.items[i], pl=plById(it.plId); it.ti=k===''?-1:+k; it.thk=it.ti>=0?pl.thks[it.ti]:''; it.H=it.ti>=0?thkIn(it.thk):''; soReprice(i,true);}
+function soReprice(i,redraw){const it=SOF.items[i], pl=plById(it.plId);
+  const r=plPrice(pl,it.sizeName,it.ti,it.L,it.W); it.mrp=r.price; it.priceBasis=r.basis;
+  if(redraw){renderSOForm();return;}
+  const m=document.getElementById('soMrp_'+i); if(m)m.textContent=it.mrp?rs(it.mrp):'—';
+  const b=document.getElementById('soBasis_'+i); if(b)b.textContent=it.priceBasis||'';
+  soRefreshTotals();}
+function soRefreshTotals(){if(!SOF)return; const t=soTotals(SOF);
+  t.lines.forEach((c,i)=>{const e=document.getElementById('soAmt_'+i); if(e)e.textContent=rs(c.net);});
+  const b=document.getElementById('soTot'); if(b)b.innerHTML=soTotalsHTML(t);}
+function soCancelForm(){if(!confirm('Discard this sales order form?'))return; SOF=null; SO_EDIT=null; showSales('list');}
+function commitSO(){
+  const s=SOF; const v=x=>String(x==null?'':x).trim();
+  s.cust.name=v(s.cust.name); if(!s.cust.name){alert('Enter the customer / dealer name.');return;}
+  if(!s.items.length){alert('Add at least one mattress.');return;}
+  for(const [i,it] of s.items.entries()){
+    const n=`Item ${i+1}: `;
+    if(!(+it.qty>0)){alert(n+'quantity must be at least 1.');return;}
+    if(+it.discPct<0||+it.discPct>100){alert(n+'discount must be between 0 and 100%.');return;}
+    if(!(+it.L>0&&+it.W>0&&+it.H>0)){alert(n+'enter the length, breadth and height.');return;}
+    if(it.type==='custom'){if(v(it.desc).length<10){alert(n+'describe the custom mattress in writing — what exactly the customer wants.');return;}
+      if(!(+it.mrp>0)){alert(n+'enter the price per mattress.');return;}}
+    else{if(!it.plId||!it.sizeName||!(it.ti>=0)){alert(n+'select the model, size and thickness.');return;}
+      if(!(+it.mrp>0)){alert(n+'no price found for this size / thickness in the price list. Ask the admin to fill it in.');return;}}
+  }
+  s.extras=s.extras.filter(e=>v(e.desc)||+e.amount);
+  if(s.extras.some(e=>!v(e.desc)||!(+e.amount>0))){alert('Every extra needs a description and an amount.');return;}
+  if(s.transport.mode==='extra'&&!(+s.transport.charge>0)){alert('Enter the transport charge, or choose another transportation option.');return;}
+  if(SO_EDIT){
+    const ex=soById(SO_EDIT); if(!ex){alert('This sales order no longer exists.');return;}
+    const wasRej=ex.status==='rejected';
+    Object.assign(ex,JSON.parse(JSON.stringify(s)));
+    if(wasRej||(!isAdmin()&&ex.status!=='pending')){ex.status='pending';delete ex.rejectReason;}
+    soLog(ex,wasRej?'Edited & resubmitted':'Edited'); ex.updatedAt=nowISO();
+    save(); toast(`Sales order ${ex.no} ${wasRej?'resubmitted for approval':'updated'}`);
+  } else {
+    const o=JSON.parse(JSON.stringify(s));
+    Object.assign(o,{id:uid(),no:seqRef('SO-',DB.soSeq),date:today(),createdAt:nowISO(),createdBy:CURRENT_USER.name,createdById:CURRENT_USER.id,status:'pending',log:[]});
+    DB.soSeq++; soLog(o,'Created');
+    DB.salesOrders.push(o); save(); toast(`Sales order ${o.no} submitted — waiting for admin approval`);
+  }
+  SOF=null; SO_EDIT=null; showSales('list');
+}
+
+/* ---------------------------- Workorder ▸ Pending orders ---------------------------- */
+let SO_LINK=null;
+function renderPendingSO(){
+  const box=document.getElementById('soPendBody'); if(!box)return;
+  if(salesLocked('soPendBody'))return;
+  const rows=[]; soPending().forEach(s=>s.items.forEach((it,i)=>{const g=soLineStage(s,i); if(g.short>0)rows.push({s,it,i,g});}));
+  rows.sort((a,b)=>(a.s.reqDate||'9999').localeCompare(b.s.reqDate||'9999')||(a.s.approvedAt||'').localeCompare(b.s.approvedAt||''));
+  document.getElementById('soPendCount').textContent=rows.length+' item(s) waiting for a work order';
+  box.innerHTML=rows.length?`<table class="oneline"><thead><tr><th>SO #</th><th>Approved</th><th>Required by</th><th>Customer</th><th>City</th><th>Product</th><th class="num">Size (in)</th>
+    <th class="num">Qty</th><th class="num">WO made</th><th>Notes</th><th>Sales person</th><th class="num"></th></tr></thead><tbody>`+
+    rows.map(({s,it,i,g})=>`<tr><td><b>${escH(s.no)}</b></td><td>${dmy((s.approvedAt||'').slice(0,10))}</td><td>${s.reqDate?dmy(s.reqDate):'-'}</td>
+      <td class="ell">${escH(s.cust.name)}</td><td class="ell">${escH(s.cust.city||'-')}</td>
+      <td class="ell" title="${escH(it.type==='custom'?it.desc:it.brand+' '+it.model+' '+it.thk)}">${it.type==='custom'?'🧩 Custom':escH(it.brand+' '+it.model)}</td>
+      <td class="num">${fmt(it.L,2)}×${fmt(it.W,2)}×${fmt(it.H,2)}</td><td class="num">${it.qty}</td><td class="num">${g.woQ}</td>
+      <td class="ell" title="${escH([it.desc,s.remarks].filter(Boolean).join('\n'))}">${escH([it.desc,s.remarks].filter(Boolean).join(' · ')||'-')}</td>
+      <td class="ell">${escH(s.createdBy||'-')}</td>
+      <td class="num acts"><button class="btn ghost sm" onclick='viewSO(${JSON.stringify(s.id)})'>View SO</button>
+        <button class="btn g sm" onclick='woFromSO(${JSON.stringify(s.id)},${i})'>＋ Create WO</button></td></tr>`).join('')+`</tbody></table>`
+    :`<p class="muted small" style="padding:14px">No approved sales orders are waiting. ✓</p>`;
+}
+function pendingBadge(){const b=document.querySelector('#woTabs button[data-w="pending"]'); if(!b)return;
+  let n=0; try{soPending().forEach(s=>n+=soLinesShort(s).length);}catch(e){}
+  b.textContent='📥 Pending orders'+(n?` (${n})`:'');}
+function woFromSO(soId,line){
+  const s=soById(soId); if(!s)return; const it=s.items[line], g=soLineStage(s,line);
+  WO_SUB='create'; showWO('create'); resetWOForm();
+  SO_LINK={soId,line,no:s.no};
+  let matched=null;
+  if(it.type!=='custom'){
+    matched=DB.products.find(p=>normName(p.brand)===normName(it.brand)&&normName(p.name)===normName(it.model));
+  }
+  if(matched){document.getElementById('woBrand').value=matched.brand; onBrandChange(); document.getElementById('woModel').value=matched.id; onModelChange();}
+  else{const cc=document.getElementById('woCustom'); cc.checked=true; toggleCustom();
+    const bs=document.getElementById('woCustBrand'); if(bs&&it.brand)bs.value=it.brand;
+    document.getElementById('woCustName').value=(it.type==='custom'?'Custom — ':it.model+' — ')+s.cust.name;}
+  const set=(id,v)=>{const e=document.getElementById(id); if(e)e.value=v==null?'':v;};
+  set('woCust',s.cust.name); set('woCity',s.cust.city); set('woAgent',s.createdBy);
+  set('woL',it.L); set('woW',it.W); set('woH',it.H); set('woQ',Math.max(1,g.short||it.qty));
+  if(s.reqDate){const d=Math.round((Date.parse(s.reqDate)-Date.parse(today()))/864e5); if(d>0)set('woDelivery',d+' DAYS');}
+  renderCalc(); showSOLink();
+  toast(`Work order form filled from ${s.no} — check and save`);
+}
+function showSOLink(){
+  const b=document.getElementById('woSOBanner'); if(!b)return;
+  if(!SO_LINK){b.style.display='none';b.innerHTML='';return;}
+  const s=soById(SO_LINK.soId), it=s&&s.items[SO_LINK.line];
+  if(!it){SO_LINK=null;b.style.display='none';return;}
+  b.style.display='block';
+  b.innerHTML=`📥 From sales order <b>${escH(s.no)}</b> · item ${SO_LINK.line+1}: ${escH(itemDesc(it))} · qty ${it.qty}
+    ${it.type!=='custom'&&!DB.products.find(p=>normName(p.brand)===normName(it.brand)&&normName(p.name)===normName(it.model))?'<br>⚠ This model has no BOM in Products & BOM yet — build the layers below (custom BOM).':''}
+    ${it.desc?`<div style="white-space:pre-wrap;margin-top:4px">📝 ${escH(it.desc)}</div>`:''}
+    ${(s.extras||[]).length?`<div style="margin-top:4px">➕ Extras: ${escH(s.extras.map(e=>e.desc).join('; '))}</div>`:''}
+    ${s.remarks?`<div style="margin-top:4px">💬 ${escH(s.remarks)}</div>`:''}
+    <div style="margin-top:6px"><button class="btn ghost sm" onclick="SO_LINK=null;showSOLink()">Unlink from sales order</button></div>`;
+}
+
+/* ---------------------------- PDF ---------------------------- */
+function soPDF(id){
+  const s=soById(id); if(!s)return; const doc=jpdf(); if(!doc)return;
+  const t=soTotals(s), co=DB.settings.company||{}, W=doc.internal.pageSize.getWidth(), M=36;
+  const R=n=>'Rs. '+Number(n||0).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2});
+  const clean=x=>String(x==null?'':x).replace(/[—–]/g,'-').replace(/₹/g,'Rs.').replace(/[^\x20-\x7E\n×]/g,'').replace(/×/g,'x');
+  doc.setFont('helvetica','bold');doc.setFontSize(16);doc.text(clean(co.name||'Napcat & Orthonap'),M,46);
+  doc.setFont('helvetica','normal');doc.setFontSize(9);
+  doc.text(clean([co.addr||'Erode, Tamil Nadu',co.phone,co.gstin?'GSTIN '+co.gstin:''].filter(Boolean).join('  |  ')),M,60);
+  doc.setFont('helvetica','bold');doc.setFontSize(14);doc.text('SALES ORDER',W-M,46,{align:'right'});
+  doc.setFont('helvetica','normal');doc.setFontSize(9);
+  doc.text(`${s.no}   |   Date ${dmy(s.date)}`,W-M,60,{align:'right'});
+  const st=soStatus(s); doc.text(clean('Status: '+st.l),W-M,72,{align:'right'});
+  doc.setDrawColor(200);doc.line(M,80,W-M,80);
+  doc.setFontSize(10);doc.setFont('helvetica','bold');doc.text('Bill to',M,96);doc.setFont('helvetica','normal');
+  const cl=[s.cust.name,s.cust.addr,[s.cust.city,s.cust.phone].filter(Boolean).join('  |  '),s.cust.gstin?'GSTIN '+s.cust.gstin:''].filter(Boolean).map(clean);
+  doc.text(doc.splitTextToSize(cl.join('\n'),300),M,110);
+  const right=[`Sales person: ${s.createdBy||'-'}`,s.reqDate?`Required by: ${dmy(s.reqDate)}`:'',s.approvedBy?`Approved by: ${s.approvedBy}`:''].filter(Boolean).map(clean);
+  doc.text(right,W-M,96,{align:'right'});
+  let y=110+cl.length*12+10;
+  doc.autoTable({startY:y,margin:{left:M,right:M},theme:'grid',styles:{fontSize:8.5,cellPadding:4,valign:'top'},headStyles:{fillColor:[30,64,124]},
+    head:[['#','Product','Size (in)','Qty','MRP / pc','Disc %','Amount']],
+    body:s.items.map((it,i)=>[i+1,clean((it.type==='custom'?'Custom mattress':`${it.brand} ${it.model} - ${it.sizeName==='Custom'?'Custom size':it.sizeName} - ${it.thk}`)+(it.desc?'\n'+it.desc:'')),
+      `${fmt(it.L,2)} x ${fmt(it.W,2)} x ${fmt(it.H,2)}`,it.qty,R(it.mrp),+it.discPct?fmt(it.discPct,2):'-',R(t.lines[i].net)]),
+    columnStyles:{0:{cellWidth:20},2:{cellWidth:78},3:{halign:'right',cellWidth:30},4:{halign:'right',cellWidth:70},5:{halign:'right',cellWidth:40},6:{halign:'right',cellWidth:78}}});
+  y=doc.lastAutoTable.finalY+8;
+  if((s.extras||[]).length){
+    doc.autoTable({startY:y,margin:{left:M,right:M},theme:'grid',styles:{fontSize:8.5,cellPadding:4},headStyles:{fillColor:[90,100,120]},
+      head:[['Extras / add-ons','Amount']],body:s.extras.map(e=>[clean(e.desc),R(e.amount)]),columnStyles:{1:{halign:'right',cellWidth:78}}});
+    y=doc.lastAutoTable.finalY+8;
+  }
+  const tot=[['Items at MRP',R(t.gross)],...(t.disc?[['Less: item discounts','- '+R(t.disc)]]:[]),...(t.extras?[['Extras / add-ons',R(t.extras)]]:[]),
+    ...(t.transport?[['Transportation',R(t.transport)]]:[]),['Taxable value',R(t.taxable)],[`GST @ ${GST_RATE}%`,R(t.gst)],...(t.roundOff?[['Round off',R(t.roundOff)]]:[]),['TOTAL',R(t.grand)]];
+  doc.autoTable({startY:y,margin:{left:W-M-230,right:M},theme:'plain',styles:{fontSize:9,cellPadding:3},body:tot,
+    columnStyles:{1:{halign:'right'}},didParseCell:d=>{if(d.row.index===tot.length-1){d.cell.styles.fontStyle='bold';d.cell.styles.fontSize=11;}}});
+  y=doc.lastAutoTable.finalY+14;
+  const pay=s.payment||{}, tr=s.transport||{};
+  const terms=[`Payment terms: ${pay.terms||'-'}${+pay.advance?`  |  Advance received: ${R(pay.advance)}`:''}`,pay.note?'  '+pay.note:'',
+    `Transportation: ${TRANSPORT[tr.mode]||'-'}${tr.mode==='extra'?'  ('+R(tr.charge)+')':''}`,tr.note?'  '+tr.note:'',
+    s.remarks?`Remarks: ${s.remarks}`:'','All list prices are without GST; GST @ 18% is added on the taxable value.',co.note||''].filter(Boolean).map(clean);
+  doc.setFontSize(9);
+  const lines=doc.splitTextToSize(terms.join('\n'),W-2*M);
+  if(y+lines.length*11>doc.internal.pageSize.getHeight()-40){doc.addPage();y=50;}
+  doc.text(lines,M,y);
+  doc.setFontSize(8);doc.setTextColor(120);doc.text('Generated '+new Date().toLocaleString('en-IN'),M,doc.internal.pageSize.getHeight()-20);
+  doc.save(`${s.no}_${clean(s.cust.name).replace(/[^A-Za-z0-9]+/g,'_')}.pdf`);
+  toast(`PDF downloaded — ${s.no}`);
+}
+
+function activeColls(){let c=ERP_OK?COLLS.concat(ERP_COLLS):COLLS; if(SALES_OK)c=c.concat(SALES_COLLS); return c;}
 async function loadErp(){
   if(!sb)return;
   const res=await Promise.all(ERP_COLLS.map(([t])=>sb.from(t).select('data')));
