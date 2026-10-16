@@ -107,6 +107,10 @@
   table.oneline tbody tr:nth-child(even) td{background:#fafbfd}
   table.oneline tbody tr:hover td{background:#f0f4fb}
   .btn[disabled]{opacity:.5;cursor:default}
+  #toastBox{position:fixed;left:50%;bottom:calc(22px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);z-index:500;display:flex;flex-direction:column;gap:8px;align-items:center;pointer-events:none;width:max-content;max-width:92vw}
+  .toast{background:#12a670;color:#fff;padding:11px 18px;border-radius:10px;font-weight:600;font-size:14px;box-shadow:0 6px 24px rgba(0,0,0,.18);opacity:0;transform:translateY(10px);transition:opacity .2s,transform .2s;pointer-events:auto;white-space:pre-line;text-align:center}
+  .toast.show{opacity:1;transform:none} .toast.err{background:#d92d20} .toast.info{background:#2f6df6}
+  @media print{#toastBox{display:none!important}}
   .layer-row{display:grid;grid-template-columns:1.6fr 1fr 1fr auto;gap:8px;margin-bottom:8px;align-items:center}
   .kpi{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:14px}
   .kpi .v{font-size:26px;font-weight:700} .kpi .l{color:var(--muted);font-size:12px}
@@ -601,6 +605,7 @@
 
 <!-- PRINT AREA -->
 <div id="printArea"></div>
+<div id="toastBox" role="status" aria-live="polite"></div>
 
 
 <script>
@@ -810,8 +815,8 @@ function initSnap(){
 function scheduleCloudPush(){ dirty=true; setSync('● Saving…','var(--warn)'); if(!pushing)runPush(); }
 async function runPush(){
   if(pushing)return; pushing=true;
-  try{ while(dirty){ dirty=false; await cloudPushDiff(); } setSync('● Online','var(--accent2)'); }
-  catch(e){ console.error('sync',e); setSync('● Save pending — retrying','var(--warn)'); dirty=true; setTimeout(runPush,4000); }
+  try{ while(dirty){ dirty=false; await cloudPushDiff(); } setSync('● Online','var(--accent2)'); if(window.__syncWarned){window.__syncWarned=0;toast('Saved online');} }
+  catch(e){ console.error('sync',e); if(!window.__syncWarned){window.__syncWarned=1;toast('Could not save online yet — retrying automatically','err',4500);} setSync('● Save pending — retrying','var(--warn)'); dirty=true; setTimeout(runPush,4000); }
   finally{ pushing=false; }
 }
 async function cloudPushDiff(){
@@ -1101,12 +1106,12 @@ function commitUser(id){
   if(!o.name||!o.username||!o.pin){alert("Name, username and PIN are required.");return;}
   if(DB.users.some(x=>x.username.toLowerCase()===o.username.toLowerCase()&&x.id!==id)){alert("Username already exists.");return;}
   if(id){Object.assign(DB.users.find(x=>x.id===id),o);}else{o.id=uid();DB.users.push(o);}
-  save();closeModal();renderUsers();
+  save();closeModal();renderUsers();toast(`User ${o.name} ${id?'updated':'created'}`);
 }
 function delUser(id){
   if(DB.users.filter(u=>u.role==='admin').length<=1 && DB.users.find(u=>u.id===id).role==='admin'){
     alert("Cannot delete the last admin.");return;}
-  if(confirm("Delete this user?")){DB.users=DB.users.filter(u=>u.id!==id);save();closeModal();renderUsers();}
+  if(confirm("Delete this user?")){DB.users=DB.users.filter(u=>u.id!==id);save();closeModal();renderUsers();toast('User deleted');}
 }
 
 /* ============================ SETTINGS ============================ */
@@ -1123,7 +1128,7 @@ function saveSettings(){
   DB.settings.flagQuilt=+document.getElementById('setQuilt').value||0;
   DB.settings.warrantyYears=+document.getElementById('setWY').value||0; DB.settings.replaceYears=+document.getElementById('setRY').value||0;
   DB.settings.labelMode=document.getElementById('setLbl').value;
-  save();alert("Settings saved.");renderReview();
+  save();toast("Settings saved");renderReview();
 }
 document.getElementById('tabs').addEventListener('click',e=>{if(e.target.dataset.v)go(e.target.dataset.v)});
 
@@ -1511,11 +1516,11 @@ function saveWO(){
   if(!o.cust){alert("Enter a customer name.");return;}
   if(editingWO){
     const ex=DB.orders.find(x=>x.id===editingWO); Object.assign(ex,o); logEdit(ex);
-    save();alert("Work order "+ex.num+" updated.");editingWO=null;
+    save();toast("Work order "+ex.num+" updated");editingWO=null;
   } else {
     if(DB.orders.length>=2000){alert("Storage limit of 2000 work orders reached. Export & archive older ones.");return;}
     o.id=uid();o.num=woRef(DB.woSeq);o.date=today();o.createdAt=new Date().toISOString();o.createdBy=CURRENT_USER?CURRENT_USER.name:'';DB.orders.push(o);DB.woSeq++;
-    save();alert("Work order "+o.num+" saved.");
+    save();toast("Work order "+o.num+" created");
   }
   resetWOForm();
 }
@@ -1598,7 +1603,7 @@ async function delWO(id){const o=DB.orders.find(x=>x.id===id); if(!o)return;
   DB.orders=DB.orders.filter(x=>x.id!==id); save();
   for(const d of docs){try{await sb.from('wo_docs').delete().eq('id',d.id); await sb.storage.from(DOC_BUCKET).remove([d.path]);}catch(e){console.error(e);}}
   if(docs.length)DB.woDocs=DB.woDocs.filter(d=>d.woId!==id);
-  renderWO();
+  renderWO(); toast(`Work order ${o.num} deleted`);
 }
 function inRange(d,from,to){if(from&&d<from)return false;if(to&&d>to)return false;return true;}
 function clearWOFilter(){['woFrom','woTo','woFCust','woFModel'].forEach(id=>{const e=document.getElementById(id);if(e)e.value='';});renderWOAll();}
@@ -1691,7 +1696,7 @@ function renderProducts(){
         <tbody>${rows}</tbody></table></div>`;
     }).join('')+`</div></div>`).join('');
 }
-function delProduct(id){if(confirm("Delete this product?")){DB.products=DB.products.filter(p=>p.id!==id);save();renderProducts();}}
+function delProduct(id){if(confirm("Delete this product?")){DB.products=DB.products.filter(p=>p.id!==id);save();renderProducts();toast('Product deleted');}}
 let editLayers=[];
 function editProduct(id){
   const p=id?DB.products.find(x=>x.id===id):{brand:"Napcat",name:"",borderWidth:82,layers:[]};
@@ -1756,7 +1761,7 @@ function commitProduct(id){
   const bw=+document.getElementById('pBW').value||82;
   if(id){const p=DB.products.find(x=>x.id===id);p.brand=brand;p.name=name;p.borderWidth=bw;p.layers=editLayers;}
   else DB.products.push({id:uid(),brand,name,borderWidth:bw,layers:editLayers});
-  save();closeModal();renderProducts();
+  save();closeModal();renderProducts();toast(`Product ${name} saved`);
 }
 
 /* ============================ MATERIAL MASTER ============================ */
@@ -1843,12 +1848,12 @@ function commitMaterial(id){
   if(id){const m=matById(id); const diff=+(o.cur-Number(m.cur||0)).toFixed(3); o.cur=Number(m.cur||0);
     Object.assign(m,o); if(diff){ if(ERP_OK)postMove(m,'adjust',diff,{note:'Edited in Material Master'}); else m.cur=+(m.cur+diff).toFixed(3); }}
   else{const start=o.cur; o.cur=0; o.id=uid(); DB.materials.push(o); if(start){ if(ERP_OK)postMove(o,'adjust',start,{note:'Opening stock'}); else o.cur=start; }}
-  save();closeModal();renderMaterials();
+  save();closeModal();renderMaterials();toast(`Material ${o.name} saved`);
 }
 function delMaterial(id){
   const used=DB.products.some(p=>p.layers.some(l=>l.mat===id));
   if(used){alert("Cannot delete — this material is used in a product BOM. Remove it from products first.");return;}
-  if(confirm("Delete this material?")){DB.materials=DB.materials.filter(m=>m.id!==id);save();closeModal();renderMaterials();}
+  if(confirm("Delete this material?")){DB.materials=DB.materials.filter(m=>m.id!==id);save();closeModal();renderMaterials();toast('Material deleted');}
 }
 
 /* ============================ BACKUP ============================ */
@@ -1857,7 +1862,7 @@ function exportData(){const blob=new Blob([JSON.stringify(DB,null,2)],{type:"app
   a.download="workorder-backup-"+new Date().toISOString().slice(0,10)+".json";a.click();}
 function importData(inp){const f=inp.files[0];if(!f)return;const rd=new FileReader();
   rd.onload=e=>{try{const d=JSON.parse(e.target.result);
-    if(!d.materials||!d.products)throw 0;DB=d;save();alert("Backup imported.");go('dash');}
+    if(!d.materials||!d.products)throw 0;DB=d;save();toast("Backup imported");go('dash');}
     catch(err){alert("That file is not a valid backup.");}};rd.readAsText(f);}
 function resetData(){if(confirm("Clear ALL data?\n\nThis permanently deletes every work order, cutting order, quilting job, flag log entry and note (on all devices), resets the material/product catalog to the starter list, and restarts reference numbers at 050901 / 141001 / 200801.\n\nThis cannot be undone. Continue?")){
   DB=sampleDB();save();go('dash');alert("All data cleared. Numbering restarts at 050901 (work orders), 141001 (block cutting), 200801 (quilting).");}}
@@ -1910,7 +1915,7 @@ async function delCut(id){const c=DB.cuts.find(x=>x.id===id); if(!c)return;
   const docs=(DB.woDocs||[]).filter(d=>d.woId===id&&d.kind==='tallycut');
   for(const d of docs){try{await sb.from('wo_docs').delete().eq('id',d.id); await sb.storage.from(DOC_BUCKET).remove([d.path]);}catch(e){console.error(e);}}
   if(docs.length)DB.woDocs=DB.woDocs.filter(d=>!(d.woId===id&&d.kind==='tallycut'));
-  renderCutTab();}
+  renderCutTab(); toast(`Cutting order ${c.no} deleted`);}
 function viewCut(id){const c=DB.cuts.find(x=>x.id===id);
   openModal(`<div class="row"><b style="font-size:16px">Cutting Order ${c.no}</b><div class="spacer"></div>
     <button class="btn ghost sm" onclick='docPDF("cut",${JSON.stringify(id)})'>⬇ PDF</button>
@@ -2035,7 +2040,7 @@ function commitCut(id){
   if(!o.planned.length){alert("Add at least one thickness with quantity.");return;}
   if(id){const c=DB.cuts.find(x=>x.id===id);Object.assign(c,o);logEdit(c);}
   else{o.id=uid();o.no=cutRef(DB.cutSeq);o.status='issued';o.result=null;o.createdAt=new Date().toISOString();DB.cuts.push(o);DB.cutSeq++;}
-  save();closeModal();renderCutTab();
+  save();closeModal();renderCutTab();toast(`Cutting order ${id?'updated':'created'}`);
 }
 let CUTRES=[], currentCutId=null;
 function completeCut(id){
@@ -2117,7 +2122,7 @@ function saveCutResult(id){
     // floor sheet sizes are kept in inches for the work-order screen
     sheets.forEach(p=>{const t=+(p.thk/25.4).toFixed(2); if(!m.sheets.some(s=>s.l===b.sL&&s.w===b.sW&&s.t===t)) m.sheets.push({l:b.sL,w:b.sW,t}); }); }
   save();closeModal();renderCutTab();
-  alert(`Cutting recorded.\n\nSheets: ${fmt(r.sheetsCFT,3)} CFT added to ${m?m.name:''} stock.\nContingent: ${fmt(r.contingent,3)} CFT.`);
+  toast(`Cutting ${c.no} recorded\nSheets ${fmt(r.sheetsCFT,3)} CFT added to stock · contingent ${fmt(r.contingent,3)} CFT`,null,5000);
 }
 
 /* ==================== Cutting orders v3 (Oct 2026): several blocks, each with its own size ====================
@@ -2189,7 +2194,7 @@ function commitCut3(id){
     supplier:v('cSup').trim(),invoiceNo:v('cInv').trim(),date:v('cDate'),planned:CUTPLAN.filter(p=>p.thk>0&&p.count>0)};
   if(id){const c=DB.cuts.find(x=>x.id===id);Object.assign(c,o);logEdit(c);}
   else{o.id=uid();o.no=cutRef(DB.cutSeq);o.status='issued';o.result=null;o.createdAt=new Date().toISOString();DB.cuts.push(o);DB.cutSeq++;}
-  save();closeModal();renderCutTab();
+  save();closeModal();renderCutTab();toast(`Cutting order ${id?DB.cuts.find(x=>x.id===id).no+' updated':(DB.cuts[DB.cuts.length-1]||{}).no+' created'}`);
 }
 function completeCut3(id){
   const c=DB.cuts.find(x=>x.id===id); currentCutId=id;
@@ -2259,7 +2264,7 @@ function saveCut3(id){
     sheets.forEach(s=>{const t=+(s.thk/25.4).toFixed(2); if(!m.sheets.some(x=>x.l===s.L&&x.w===s.W&&x.t===t)) m.sheets.push({l:s.L,w:s.W,t});});
   }
   save();closeModal();renderCutTab();
-  alert(`Cutting recorded.\n\nSheets: ${fmt(r.sheetsCFT,3)} CFT → ${m?m.name:''}\nContingent: ${fmt(r.contingent,3)} CFT → ${cm?cm.name:''}`);
+  toast(`Cutting ${c.no} recorded\nSheets ${fmt(r.sheetsCFT,3)} CFT → ${m?m.name:''}\nContingent ${fmt(r.contingent,3)} CFT → ${cm?cm.name:''}`,null,5000);
 }
 function buildCutSheet3(c){
   const r=c.result;
@@ -2365,7 +2370,7 @@ function saveCutResultLegacy(id){
     c.stockAdded=sheetsCFT; m.sheets=m.sheets||[];
     sheets.forEach(p=>{ if(!m.sheets.some(s=>s.l===c.L&&s.w===c.W&&s.t===p.thk)) m.sheets.push({l:c.L,w:c.W,t:p.thk}); }); }
   save();closeModal();renderCutTab();
-  alert(`Cutting recorded. ${fmt(sheetsCFT,3)} CFT of fresh ${m?m.name:''} sheets added to stock.`);
+  toast(`Cutting ${c.no} recorded — ${fmt(sheetsCFT,3)} CFT sheets added to stock`,null,5000);
 }
 function buildCutSheet(c){
   if(isMulti(c))return buildCutSheet3(c);
@@ -2469,9 +2474,9 @@ function commitOther(id){
   if(!o.title&&!o.note){alert("Enter a title or a note.");return;}
   if(id){Object.assign((DB.others||[]).find(x=>x.id===id),o);}
   else{o.id=uid();o.by=(CURRENT_USER?CURRENT_USER.name:'');DB.others=DB.others||[];DB.others.push(o);}
-  save();closeModal();renderOthers();
+  save();closeModal();renderOthers();toast(id?'Note updated':'Note added');
 }
-function delOther(id){if(confirm("Delete this entry?")){DB.others=(DB.others||[]).filter(x=>x.id!==id);save();closeModal();renderOthers();}}
+function delOther(id){if(confirm("Delete this entry?")){DB.others=(DB.others||[]).filter(x=>x.id!==id);save();closeModal();renderOthers();toast('Note deleted');}}
 
 /* ============================ QUILTING JOBS ============================ */
 let QUILT_SUB='create';
@@ -2504,7 +2509,7 @@ function renderQuiltAll(){
 function delQuilt(id){const j=DB.quiltJobs.find(x=>x.id===id); if(!j)return;
   if(!delAllowed(j,'Quilting job '+j.no))return;
   if(!confirm(`Delete quilting job ${j.no} completely?${(j.receipts||[]).length?`\n\n• ${j.receipts.length} received lot(s) will be deleted too`:''}\n\nThis cannot be undone.`))return;
-  DB.quiltJobs=DB.quiltJobs.filter(x=>x.id!==id);save();renderQuiltTab();}
+  DB.quiltJobs=DB.quiltJobs.filter(x=>x.id!==id);save();renderQuiltTab();toast(`Quilting job ${j.no} deleted`);}
 function viewQuilt(id){const j=DB.quiltJobs.find(x=>x.id===id);
   openModal(`<div class="row"><b style="font-size:16px">Quilting Job ${j.no}</b><div class="spacer"></div>
     <button class="btn ghost sm" onclick='docPDF("quilt",${JSON.stringify(id)})'>⬇ PDF</button>
@@ -2591,7 +2596,7 @@ function commitQuilt(id){
   if(!sets.length){alert("Add at least one product set (fabric + foam).");return;}
   if(id){const j=DB.quiltJobs.find(x=>x.id===id);Object.assign(j,o);logEdit(j);}
   else{o.id=uid();o.status='issued';o.receipts=[];o.createdAt=new Date().toISOString();DB.quiltJobs.push(o);DB.quiltSeq++;}
-  save();closeModal();renderQuiltTab();
+  save();closeModal();renderQuiltTab();toast(`Quilting job ${id?'updated':'created'}`);
 }
 function addReceipt(id){
   const j=DB.quiltJobs.find(x=>x.id===id); const rc=quiltRecv(j); const rem=(+j.fabM||0)-rc;
@@ -2615,13 +2620,13 @@ function saveReceipt(id){
   j.receipts=j.receipts||[];
   j.receipts.push({date:document.getElementById('lotDate').value,recvM:m,notes:document.getElementById('lotNotes').value});
   if(j.status==='issued')j.status='partial';
-  save();closeModal();renderQuiltTab();
+  save();closeModal();renderQuiltTab();toast('Received lot saved');
 }
 function delReceipt(id,i){const j=DB.quiltJobs.find(x=>x.id===id);j.receipts.splice(i,1);logEdit(j);
   if(!j.receipts.length&&j.status==='partial')j.status='issued';save();addReceipt(id);}
 function closeQuilt(id){const j=DB.quiltJobs.find(x=>x.id===id);
   if(confirm(`Close job ${j.no}? Received ${fmt(quiltRecv(j),1)}m of ${j.fabM}m issued. No more lots can be added.`)){
-    j.status='received';save();renderQuiltTab();}}
+    j.status='received';save();renderQuiltTab();toast(`Quilting job ${j.no} closed`);}}
 function buildQuiltSheet(j){
   return `<div class="wo-sheet">
     <div class="h"><div><div class="t">QUILTING JOB ORDER</div><div class="tag">to ${j.quilter||''}</div></div>
@@ -2906,7 +2911,7 @@ function commitReceive(){
   const m=matById(document.getElementById('rvMat').value), q=+document.getElementById('rvQty').value;
   if(!m||!(q>0))return alert('Choose a material and enter a quantity above 0.');
   postMove(m,'receipt',q,{date:document.getElementById('rvDate').value||today(),party:val('rvParty'),ref:val('rvRef'),note:val('rvNote')});
-  save();closeModal();renderStores();
+  save();closeModal();renderStores();toast(`Stock received — ${fmt(q,3)} ${m.unit} ${m.name}`);
 }
 function issueModal(woId){
   if(!ERP_OK)return alert('Run erp_setup.sql in Supabase first.');
@@ -2952,7 +2957,7 @@ function commitIssue(){
   todo.forEach(r=>postMove(r.m,'issue',-r.q,{date:d,woId:o.id,woNum:o.num,party:o.cust}));
   save();closeModal();
   if(CURRENT_VIEW==='stores')renderStores(); else if(CURRENT_VIEW==='wo')renderWO();
-  alert(`Issued ${todo.length} material(s) to ${o.num}.`);
+  toast(`Issued ${todo.length} material(s) to ${o.num}`);
 }
 function adjustModal(){
   if(!isAdmin())return;
@@ -2969,7 +2974,7 @@ function commitAdjust(){
   const m=matById(document.getElementById('adMat').value), raw=document.getElementById('adQty').value, note=val('adNote');
   if(!m||raw==='')return alert('Enter the counted stock.'); if(!note)return alert('A reason is required for adjustments.');
   const diff=+(Number(raw)-Number(m.cur||0)).toFixed(3); if(!diff){closeModal();return;}
-  postMove(m,'adjust',diff,{note}); save();closeModal();renderStores();
+  postMove(m,'adjust',diff,{note}); save();closeModal();renderStores();toast(`Stock adjusted — ${m.name} now ${fmt(m.cur,3)} ${m.unit}`);
 }
 
 /* ============================ PRODUCTION & SERIAL NUMBERS ============================ */
@@ -3038,7 +3043,7 @@ function commitProduce(woId){
   const d=document.getElementById('pdDate').value||today(); const made=[];
   for(let i=0;i<q;i++){const s={id:uid(),serial:newSerial(o),woId:o.id,woNum:o.num,brand:o.brand,model:o.model,L:o.L,W:o.W,H:o.H,
     cust:o.cust,mfgDate:d,status:'stock',by:CURRENT_USER.name,at:nowISO()}; DB.serials.push(s); made.push(s);}
-  save(); const pr=document.getElementById('pdPrint').checked; closeModal(); renderProduction();
+  save(); toast(`${q} serial number(s) created`); const pr=document.getElementById('pdPrint').checked; closeModal(); renderProduction();
   if(pr)printLabels(made.map(s=>s.id));
 }
 function serialsModal(woId){
@@ -3183,7 +3188,7 @@ function commitDispatch(id){
     invoiceNo:d.invoiceNo,invoiceDate:d.invoiceDate,wYears:d.wYears,rYears:d.rYears});});
   if(!id)DB.dispatches.push(d); else logEdit(d);
   save();closeModal();renderDispatch();
-  if(!d.invoiceDate)alert(`${d.no} saved. Add the Tally invoice date later — warranty starts from it (until then the dispatch date is used).`);
+  toast(`Dispatch ${d.no} saved`+(d.invoiceDate?'':' — add the invoice date later'),null,4500);
 }
 function printDispatch(id){
   const d=DB.dispatches.find(x=>x.id===id); const ss=d.serialIds.map(sid=>DB.serials.find(s=>s.id===sid)).filter(Boolean);
@@ -3284,7 +3289,7 @@ function commitClaim(id,serialId){
     else{delete s.replacedBy; c.replSerial='';}
     c.replSerialId=rid||'';
   }
-  if(!id)DB.claims.push(c); save();closeModal();
+  if(!id)DB.claims.push(c); save();closeModal();toast(`Warranty claim ${c.no} ${id?'updated':'registered'}`);
   if(CURRENT_VIEW==='warranty')renderWarranty();
 }
 
@@ -3401,7 +3406,7 @@ function commitPS(id){
   p.woNums=p.lines.map(l=>l.woNum);
   if(!id)DB.dispatches.push(p); else logEdit(p);
   const pr=document.getElementById('psPrint').checked;
-  save(); closeModal();
+  save(); closeModal(); toast(`Packing slip ${p.no} ${id?'updated':'created'}`);
   if(CURRENT_VIEW==='wo')renderWO(); else if(CURRENT_VIEW==='dispatch')renderDispatch();
   if(pr)printPS(p.id);
 }
@@ -3465,7 +3470,7 @@ async function delPS(id){const p=psById(id); if(!p)return;
   DB.dispatches=DB.dispatches.filter(d=>d.id!==id); save();
   for(const d of inv){try{await sb.from('wo_docs').delete().eq('id',d.id); await sb.storage.from(DOC_BUCKET).remove([d.path]);}catch(e){console.error(e);}}
   if(inv.length)DB.woDocs=DB.woDocs.filter(d=>d.psId!==id);
-  renderDispatch();
+  renderDispatch(); toast(`Packing slip ${p.no} deleted`);
 }
 
 /* ============================ INVOICES & TALLY WO (PDF documents) ============================ */
@@ -3641,7 +3646,7 @@ async function commitDoc(kind){
     await pushDoc(d);
     DB.woDocs.push(d);
     const auto=document.getElementById('dAuto').checked;
-    closeModal(); renderDocTab(kind);
+    closeModal(); renderDocTab(kind); toast(`${DOC_KINDS[kind].label} ${docNo} uploaded`+(auto?' — Claude is checking…':''));
     if(auto)runCheck(id);
   }catch(e){console.error(e);btn.disabled=false;btn.textContent='Upload';err('Upload failed: '+(e.message||e));}
 }
@@ -3658,7 +3663,7 @@ async function delDoc(id){
   try{
     const r=await sb.from('wo_docs').delete().eq('id',id); if(r.error)throw r.error;
     await sb.storage.from(DOC_BUCKET).remove([d.path]);
-    DB.woDocs=DB.woDocs.filter(x=>x.id!==id); renderDocTab(d.kind);
+    DB.woDocs=DB.woDocs.filter(x=>x.id!==id); renderDocTab(d.kind); toast(`${DOC_KINDS[d.kind].label} ${d.docNo} deleted`);
   }catch(e){alert('Delete failed: '+(e.message||e));}
 }
 
@@ -3682,6 +3687,7 @@ async function runCheck(id,opts){
       '\n\nIf this is the first time, make sure the check-doc function and the ANTHROPIC_API_KEY secret are set up in Supabase.');
   }finally{ delete DOC_BUSY[id]; renderDocTab(d.kind); if(CURRENT_VIEW==='wo'&&WO_SUB==='all')renderWOAll(); }
   if(quiet)return failMsg;
+  if(d.check&&!failMsg){const v=d.check.verdict; toast(`Claude check done — ${d.docNo}: ${v==='match'?'matches':v==='mismatch'?'differences found':'unclear'}`,v==='match'?null:v==='mismatch'?'err':'info',4000);}
   if(d.check&&document.getElementById('modal').style.display!=='flex')showCheck(id);
   return failMsg;
 }
@@ -3707,7 +3713,7 @@ async function checkAllDocs(kind,all){
     job.done++; if(err)job.fail.push(err); else if(d&&d.check){const v=d.check.verdict; if(v==='match')job.ok++; else if(v==='mismatch')job.diff++; else job.unclear++;}
     show();}};
   await Promise.all([worker(),worker()]);
-  delete BULK[kind]; show();
+  delete BULK[kind]; show(); toast(`${job.stop?'Stopped':'Done'} — ${job.done} checked: ${job.ok} match, ${job.diff} with differences`+(job.fail.length?`, ${job.fail.length} failed`:''),job.diff||job.fail.length?'info':null,5000);
   if(job.diff+job.unclear){const s=document.getElementById('docS-'+kind); s.value='issue';}
   renderDocTab(kind); if(CURRENT_VIEW==='wo'&&WO_SUB==='all')renderWOAll();
 }
@@ -3732,14 +3738,14 @@ async function commitAccept(id){
   const prev=d.resolved;
   d.resolved={by:CURRENT_USER.name,at:new Date().toISOString(),note:(document.getElementById('accNote').value||'').trim(),checkAt:d.check.at};
   try{await pushDoc(d);}catch(e){d.resolved=prev;alert('Could not save: '+(e.message||e));return;}
-  closeModal(); renderDocTab(d.kind); if(CURRENT_VIEW==='wo'&&WO_SUB==='all')renderWOAll();
+  closeModal(); toast('Marked as accepted'); renderDocTab(d.kind); if(CURRENT_VIEW==='wo'&&WO_SUB==='all')renderWOAll();
 }
 async function reopenDoc(id){
   const d=(DB.woDocs||[]).find(x=>x.id===id); if(!d||!isAccepted(d))return;
   if(!confirm('Undo the acceptance? It will show as Differences again.'))return;
   const prev=d.resolved; delete d.resolved;
   try{await pushDoc(d);}catch(e){d.resolved=prev;alert('Could not save: '+(e.message||e));return;}
-  showCheck(id); renderDocTab(d.kind); if(CURRENT_VIEW==='wo'&&WO_SUB==='all')renderWOAll();
+  toast('Acceptance undone','info'); showCheck(id); renderDocTab(d.kind); if(CURRENT_VIEW==='wo'&&WO_SUB==='all')renderWOAll();
 }
 function showCheck(id){
   const d=(DB.woDocs||[]).find(x=>x.id===id); if(!d||!d.check)return;
@@ -3790,6 +3796,13 @@ function labelTables(){
 let __lblPending=false;
 new MutationObserver(()=>{if(__lblPending)return;__lblPending=true;requestAnimationFrame(()=>{__lblPending=false;labelTables();});})
   .observe(document.body,{childList:true,subtree:true});
+/* short confirmation message at the bottom of the screen */
+function toast(msg,type,ms){
+  const box=document.getElementById('toastBox'); if(!box)return;
+  const t=document.createElement('div'); t.className='toast'+(type?' '+type:''); t.textContent=(type==='err'?'⚠ ':'✓ ')+msg;
+  box.appendChild(t); requestAnimationFrame(()=>t.classList.add('show'));
+  setTimeout(()=>{t.classList.remove('show');setTimeout(()=>t.remove(),250);},ms||3200);
+}
 boot();
 </script>
 </body>
