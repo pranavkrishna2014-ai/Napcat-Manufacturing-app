@@ -292,11 +292,11 @@
       <div class="card">
         <div class="row"><b>Production</b><span class="tag" id="prCount"></span><div class="spacer"></div>
           <button class="btn ghost sm" onclick="issueModal()">− Issue material</button></div>
-        <div class="hint">Issue materials from stores, record finished mattresses (each gets a serial number + barcode label), and see what is ready to dispatch.</div>
+        <div class="hint">Issue materials from stores, then <b>📦 Pack</b> what is leaving: it creates a packing slip (customer copy + office copy). The office makes the Tally invoice from the slip, uploads it, and Claude checks invoice vs packing slip.</div>
         <div class="row" style="margin-top:10px">
           <input id="prF" placeholder="search WO #, customer or model" style="max-width:300px" oninput="renderProduction()">
           <select id="prS" style="max-width:200px" onchange="renderProduction()"><option value="open">In progress / not started</option>
-            <option value="ready">Ready to dispatch</option><option value="done">Fully dispatched</option><option value="">All</option></select>
+            <option value="ready">Part packed</option><option value="done">Fully packed</option><option value="">All</option></select>
         </div>
       </div>
       <div class="card" style="padding:0;overflow:auto"><div id="prodBody"></div></div>
@@ -306,13 +306,13 @@
     <div class="woSub" id="woSub-inv" style="display:none">
       <div class="card">
         <div class="row">
-          <b>Invoices against work orders</b><span class="tag" id="docCount-invoice"></span><div class="spacer"></div>
+          <b>Invoices against packing slips</b><span class="tag" id="docCount-invoice"></span><div class="spacer"></div>
           <button class="btn sm" id="docAll-invoice" onclick="checkAllDocs('invoice')" style="display:none"></button>
           <button class="btn g sm" id="docUp-invoice" onclick="uploadDocModal('invoice')">＋ Upload Invoice PDF</button>
         </div>
-        <div class="hint">Bills raised in Tally for each work order. Upload the PDF and Claude compares it with the work order — customer, model, size and quantity.</div>
+        <div class="hint">Tally invoices made from packing slips. Upload the PDF against its packing slip and Claude checks the invoice against what was actually packed — customer, every model, size and quantity. (Older invoices stay checked against their work order.)</div>
         <div class="row" style="margin-top:10px">
-          <input id="docF-invoice" placeholder="search WO #, customer, model or number" style="max-width:300px" oninput="renderDocTab('invoice')">
+          <input id="docF-invoice" placeholder="search slip #, WO #, customer or invoice no" style="max-width:300px" oninput="renderDocTab('invoice')">
           <select id="docS-invoice" style="max-width:210px" onchange="renderDocTab('invoice')">
             <option value="">All</option><option value="pending">Not checked yet</option>
             <option value="issue">Differences / unclear (to review)</option><option value="match">OK (matches + accepted)</option><option value="accepted">Accepted by admin</option></select>
@@ -551,11 +551,12 @@
 
   <!-- DISPATCH -->
   <section class="view" id="view-dispatch">
-    <div class="row"><h2 class="section">Dispatch</h2><div class="spacer"></div>
-      <button class="btn g" id="dpNew" onclick="dispatchModal()">＋ New dispatch</button></div>
+    <div class="row"><h2 class="section">Packing slips &amp; dispatch</h2><div class="spacer"></div>
+      <button class="btn g" id="dpNew" onclick="psModal()">＋ New packing slip</button></div>
     <p class="lead" id="dpReady"></p>
     <div class="card"><div class="row">
-      <input id="dpF" placeholder="search dispatch #, customer, invoice, vehicle, WO #" style="max-width:340px" oninput="renderDispatch()">
+      <input id="dpF" placeholder="search slip #, customer, vehicle, LR, WO #" style="max-width:340px" oninput="renderDispatch()">
+      <select id="dpInv" style="max-width:190px" onchange="renderDispatch()"><option value="">All slips</option><option value="none">Not invoiced yet</option><option value="issue">Invoice differences</option></select>
       <label class="tag">From</label><input type="date" id="dpFrom" style="max-width:150px" onchange="renderDispatch()">
       <label class="tag">To</label><input type="date" id="dpTo" style="max-width:150px" onchange="renderDispatch()"></div></div>
     <div class="card" style="padding:0;overflow:auto"><div id="dispBody"></div></div>
@@ -739,7 +740,7 @@ function ensureDB(d){
   d.others=d.others||[];
   d.woDocs=d.woDocs||[];
   d.moves=d.moves||[]; d.serials=d.serials||[]; d.dispatches=d.dispatches||[]; d.claims=d.claims||[];
-  d.serialSeq=d.serialSeq||1; d.dispSeq=d.dispSeq||1; d.claimSeq=d.claimSeq||1;
+  d.serialSeq=d.serialSeq||1; d.dispSeq=d.dispSeq||1; d.claimSeq=d.claimSeq||1; d.psSeq=d.psSeq||1;
   if(d.settings&&d.settings.warrantyYears==null){d.settings.warrantyYears=10;d.settings.replaceYears=3;}
   if(d.settings&&!d.settings.labelMode)d.settings.labelMode='roll';
   d.settings=d.settings||{flagWO:4,flagCut:20,flagQuilt:5};
@@ -776,7 +777,7 @@ const COLLS=[
   ['products','products', o=>({id:o.id,data:o})],
   ['app_users','users', o=>({id:o.id,data:o})],
 ];
-function metaObj(){return {settings:DB.settings,woSeq:DB.woSeq,blockSeq:DB.blockSeq,cutSeq:DB.cutSeq,quiltSeq:DB.quiltSeq,adminPin:DB.adminPin,flagLog:DB.flagLog,others:DB.others,serialSeq:DB.serialSeq,dispSeq:DB.dispSeq,claimSeq:DB.claimSeq};}
+function metaObj(){return {settings:DB.settings,woSeq:DB.woSeq,blockSeq:DB.blockSeq,cutSeq:DB.cutSeq,quiltSeq:DB.quiltSeq,adminPin:DB.adminPin,flagLog:DB.flagLog,others:DB.others,serialSeq:DB.serialSeq,dispSeq:DB.dispSeq,claimSeq:DB.claimSeq,psSeq:DB.psSeq};}
 function setSync(t,cls){const c=document.getElementById('syncChip');if(c){c.textContent=t;c.style.color=cls||'';}}
 
 function uid(){return Math.random().toString(36).slice(2,10)+Date.now().toString(36).slice(-4)}
@@ -796,7 +797,7 @@ async function cloudLoad(){
   const empty=!o.data.length&&!c.data.length&&!qq.data.length&&!m.data.length&&!p.data.length&&!u.data.length&&!md;
   if(empty) return true;
   DB={orders:rows(o),cuts:rows(c),quiltJobs:rows(qq),materials:rows(m),products:rows(p),users:rows(u),
-    settings:md&&md.settings,woSeq:md&&md.woSeq,blockSeq:md&&md.blockSeq,cutSeq:md&&md.cutSeq,quiltSeq:md&&md.quiltSeq,adminPin:md&&md.adminPin,flagLog:md&&md.flagLog,others:md&&md.others,serialSeq:md&&md.serialSeq,dispSeq:md&&md.dispSeq,claimSeq:md&&md.claimSeq};
+    settings:md&&md.settings,woSeq:md&&md.woSeq,blockSeq:md&&md.blockSeq,cutSeq:md&&md.cutSeq,quiltSeq:md&&md.quiltSeq,adminPin:md&&md.adminPin,flagLog:md&&md.flagLog,others:md&&md.others,serialSeq:md&&md.serialSeq,dispSeq:md&&md.dispSeq,claimSeq:md&&md.claimSeq,psSeq:md&&md.psSeq};
   ensureDB(DB);
   try{localStorage.setItem("wo_db",JSON.stringify(DB));}catch(e){}
   return false;
@@ -1569,7 +1570,7 @@ const DEL_HOURS=48;
 function recAgeH(r){const t=r.createdAt?Date.parse(r.createdAt):Date.parse((r.date||'1970-01-01')+'T00:00:00+05:30');return (Date.now()-t)/36e5;}
 function delLeftH(r){return DEL_HOURS-recAgeH(r);}
 function delBtn(type,r){
-  const left=delLeftH(r), fn={wo:'delWO',cut:'delCut',quilt:'delQuilt'}[type];
+  const left=delLeftH(r), fn={wo:'delWO',cut:'delCut',quilt:'delQuilt',ps:'delPS'}[type];
   if(left>0)return `<button class="btn danger ghost sm" title="Delete completely — ${left>=1?Math.floor(left)+' h':Math.max(1,Math.round(left*60))+' min'} left" onclick='${fn}(${JSON.stringify(r.id)})'>✕</button>`;
   if(isAdmin())return `<button class="btn ghost sm" title="Older than 48 hours — admin delete" onclick='${fn}(${JSON.stringify(r.id)})'>🔒✕</button>`;
   return `<span class="tag" title="Entries can only be deleted within 48 hours of creation">🔒</span>`;
@@ -1583,6 +1584,7 @@ function delAllowed(r,label){
 }
 async function delWO(id){const o=DB.orders.find(x=>x.id===id); if(!o)return;
   const ss=(DB.serials||[]).filter(s=>s.woId===id);
+  if(slipsOf(id).length){alert(`${o.num} is on packing slip ${slipsOf(id).map(p=>p.no).join(', ')}. Delete the packing slip first.`);return;}
   if(ss.some(s=>s.status==='dispatched')){alert(`${o.num} has mattresses already dispatched, so it can't be deleted.`);return;}
   const mv=(DB.moves||[]).filter(v=>v.woId===id&&(v.type==='issue'||v.type==='return'));
   const docs=(DB.woDocs||[]).filter(d=>d.woId===id);
@@ -2973,14 +2975,15 @@ function commitAdjust(){
 /* ============================ PRODUCTION & SERIAL NUMBERS ============================ */
 function serialsOf(woId){return DB.serials.filter(s=>s.woId===woId);}
 function woProgress(o){
-  const ss=serialsOf(o.id), made=ss.filter(s=>s.status!=='void').length, disp=ss.filter(s=>s.status==='dispatched').length;
+  const ss=serialsOf(o.id), packed=packedQty(o.id), disp=ss.filter(s=>s.status==='dispatched').length+packed,
+    made=Math.max(ss.filter(s=>s.status!=='void').length,disp);
   const Q=Number(o.Q||0), issued=DB.moves.some(v=>v.woId===o.id&&v.type==='issue');
   let st='Open',cls='pend';
-  if(made>0&&made<Q){st='In production';cls='low';}
-  else if(Q&&made>=Q&&!disp){st='Ready';cls='ok';}
-  else if(Q&&made>=Q&&disp<Q){st='Part dispatched';cls='low';}
-  if(Q&&disp>=Q){st='Dispatched';cls='ok';}
-  return {made,disp,Q,issued,st,cls,due:woDue(o)};
+  if(Q&&disp>=Q){st='Packed';cls='ok';}
+  else if(disp>0){st='Part packed';cls='low';}
+  else if(Q&&made>=Q){st='Ready';cls='ok';}
+  else if(made>0){st='In production';cls='low';}
+  return {made,disp,packed,Q,issued,st,cls,due:woDue(o)};
 }
 function woDue(o){const n=parseInt(String(o.delivery||'').replace(/[^0-9]/g,''));return (n>0&&o.date)?addDays(o.date,n):null;}
 function brandPrefix(b){const s=(b||'').trim().toUpperCase();
@@ -2995,23 +2998,24 @@ function renderProduction(){
   const f=(document.getElementById('prF').value||'').trim().toLowerCase(), fs=document.getElementById('prS').value;
   const rows=DB.orders.slice().reverse().map(o=>({o,p:woProgress(o)})).filter(({o,p})=>
     (!f||[o.num,o.cust,o.model].join(' ').toLowerCase().includes(f)) &&
-    (!fs||(fs==='open'?['Open','In production'].includes(p.st):fs==='ready'?p.st==='Ready'||p.st==='Part dispatched':p.st==='Dispatched')));
+    (!fs||(fs==='open'?['Open','In production','Part packed'].includes(p.st):fs==='ready'?p.st==='Ready'||p.st==='Part packed':p.st==='Packed')));
   const t=today();
   document.getElementById('prCount').textContent=rows.length+' work orders';
   document.getElementById('prodBody').innerHTML=rows.length?`<table class="oneline"><thead><tr><th>WO #</th><th>Date</th><th>Due</th><th>Customer</th><th>Model</th><th class="num">Size</th>
-    <th class="num">Qty</th><th>Materials</th><th>Made</th><th class="num">Dispatched</th><th>Status</th><th class="num"></th></tr></thead><tbody>`+
-    rows.map(({o,p})=>{const late=p.due&&p.due<t&&['Open','In production'].includes(p.st);
+    <th class="num">Qty</th><th>Materials</th><th>Packed</th><th class="num">Left</th><th>Status</th><th class="num"></th></tr></thead><tbody>`+
+    rows.map(({o,p})=>{const late=p.due&&p.due<t&&['Open','In production','Part packed'].includes(p.st);
       const pct=p.Q?Math.min(100,Math.round(p.made/p.Q*100)):0;
       return `<tr><td><b>${escH(o.num)}</b></td><td>${dmy(o.date)}</td><td style="${late?'color:var(--danger);font-weight:700':''}">${p.due?dmy(p.due)+(late?' ⚠':''):'-'}</td>
       <td class="ell" title="${escH(o.cust||'')}">${escH(o.cust||'-')}</td><td class="ell" title="${escH(o.brand+' · '+o.model)}">${escH(o.model)}</td>
       <td class="num">${o.L}×${o.W}×${o.H}</td><td class="num">${o.Q}</td>
       <td>${p.issued?'<span class="pill ok">Issued</span>':'<span class="pill pend">Not issued</span>'}</td>
-      <td><div style="display:flex;align-items:center;gap:6px"><div style="width:70px;height:7px;background:var(--line);border-radius:4px;overflow:hidden"><div style="width:${pct}%;height:100%;background:var(--accent2)"></div></div><span class="small">${p.made}/${p.Q}</span></div></td>
-      <td class="num">${p.disp||'-'}</td><td><span class="pill ${p.cls}">${p.st}</span></td>
+      <td><div style="display:flex;align-items:center;gap:6px"><div style="width:70px;height:7px;background:var(--line);border-radius:4px;overflow:hidden"><div style="width:${p.Q?Math.min(100,Math.round(p.disp/p.Q*100)):0}%;height:100%;background:var(--accent2)"></div></div><span class="small">${p.disp}/${p.Q}</span></div></td>
+      <td class="num">${woRemaining(o)}</td><td><span class="pill ${p.cls}">${p.st}</span></td>
       <td class="num acts">
         <button class="btn ghost sm" onclick='issueModal(${JSON.stringify(o.id)})'>Issue</button>
-        <button class="btn sm" ${p.made>=p.Q?'disabled':''} onclick='produceModal(${JSON.stringify(o.id)})'>+ Made</button>
-        <button class="btn ghost sm" ${p.made?'':'disabled'} onclick='serialsModal(${JSON.stringify(o.id)})'>Serials</button></td></tr>`;}).join('')+`</tbody></table>`
+        <button class="btn sm" ${woRemaining(o)>0?'':'disabled'} title="Create a packing slip for what is leaving now" onclick='psModal(null,${JSON.stringify(o.id)})'>📦 Pack</button>
+        ${slipsOf(o.id).length?`<button class="btn ghost sm" onclick='slipsModal(${JSON.stringify(o.id)})'>Slips (${slipsOf(o.id).length})</button>`:''}
+        ${serialsOf(o.id).length?`<button class="btn ghost sm" onclick='serialsModal(${JSON.stringify(o.id)})'>Serials</button>`:''}</td></tr>`;}).join('')+`</tbody></table>`
     :`<p class="muted small" style="padding:14px">No work orders match.</p>`;
 }
 function produceModal(woId){
@@ -3090,21 +3094,32 @@ function printLabels(ids){
 /* ============================ DISPATCH ============================ */
 function renderDispatch(){
   if(erpLocked('dispBody'))return;
-  document.getElementById('dpNew').style.display=canDocs()?'':'none';
-  const f=(document.getElementById('dpF').value||'').trim().toLowerCase();
+  document.getElementById('dpNew').style.display='';
+  const f=(document.getElementById('dpF').value||'').trim().toLowerCase(), fi=document.getElementById('dpInv').value;
   const from=document.getElementById('dpFrom').value,to=document.getElementById('dpTo').value;
-  const list=DB.dispatches.filter(d=>inRange(d.date,from,to)&&(!f||[d.no,d.cust,d.invoiceNo,d.vehicle,(d.woNums||[]).join(' ')].join(' ').toLowerCase().includes(f))).slice().reverse();
-  const ready=DB.serials.filter(s=>s.status==='stock').length;
-  document.getElementById('dpReady').textContent=`${ready} finished mattress(es) in factory, ready to dispatch`;
-  document.getElementById('dispBody').innerHTML=list.length?`<table class="oneline"><thead><tr><th>Dispatch #</th><th>Date</th><th>Customer</th><th>City</th><th>WO #</th>
-    <th class="num">Pcs</th><th>Invoice</th><th>Inv. date</th><th>Vehicle</th><th>Transporter / LR</th><th class="num"></th></tr></thead><tbody>`+
-    list.map(d=>`<tr><td><b>${escH(d.no)}</b></td><td>${dmy(d.date)}</td><td class="ell" title="${escH(d.cust)}">${escH(d.cust||'-')}</td><td class="ell">${escH(d.city||'-')}</td>
-      <td class="ell" title="${escH((d.woNums||[]).join(', '))}">${escH((d.woNums||[]).join(', '))}</td><td class="num">${(d.serialIds||[]).length}</td>
+  const all=DB.dispatches.filter(d=>inRange(d.date,from,to)&&(!f||[d.no,d.cust,d.city,d.invoiceNo,d.vehicle,d.lr,(d.woNums||[]).join(' ')].join(' ').toLowerCase().includes(f))).slice().reverse();
+  const ps=all.filter(isPS).filter(p=>!fi||(fi==='none'?!psInvoices(p).length:psInvoices(p).some(isIssue)));
+  const old=fi?[]:all.filter(d=>!isPS(d));
+  const notInv=slips().filter(p=>!psInvoices(p).length).length;
+  document.getElementById('dpReady').textContent=`${slips().length} packing slip(s) · ${notInv} waiting for the Tally invoice`;
+  document.getElementById('dispBody').innerHTML=(ps.length?`<table class="oneline"><thead><tr><th>Slip #</th><th>Date</th><th>Customer</th><th>City</th><th>WO #</th>
+    <th class="num">Pcs</th><th>Vehicle</th><th>Transporter / LR</th>${DOCS_OK?'<th>Invoice</th>':''}<th class="num"></th></tr></thead><tbody>`+
+    ps.map(p=>`<tr><td><b>${escH(p.no)}</b></td><td>${dmy(p.date)}</td><td class="ell" title="${escH(p.cust)}">${escH(p.cust||'-')}</td><td class="ell">${escH(p.city||'-')}</td>
+      <td class="ell" title="${escH((p.woNums||[]).join(', '))}">${escH((p.woNums||[]).join(', '))}</td><td class="num"><b>${psQty(p)}</b></td>
+      <td>${escH(p.vehicle||'-')}</td><td class="ell" title="${escH([p.transporter,p.lr].filter(Boolean).join(' · '))}">${escH([p.transporter,p.lr].filter(Boolean).join(' · ')||'-')}</td>
+      ${DOCS_OK?`<td>${psInvCell(p)}</td>`:''}
+      <td class="num acts"><button class="btn ghost sm" onclick='viewPS(${JSON.stringify(p.id)})'>View</button>
+        <button class="btn ghost sm" title="Print customer + office copy" onclick='printPS(${JSON.stringify(p.id)})'>🖨</button>
+        ${canDocs()&&DOCS_OK?`<button class="btn ghost sm" title="Upload the Tally invoice made from this slip" onclick='uploadDocModal("invoice",${JSON.stringify(p.id)})'>＋ Invoice</button>`:''}
+        <button class="btn ghost sm" onclick='psModal(${JSON.stringify(p.id)})'>Edit</button> ${delBtn('ps',p)}</td></tr>`).join('')+`</tbody></table>`
+    :`<p class="muted small" style="padding:14px">No packing slips ${fi||f?'match':'yet — create one from Workorder → Production → 📦 Pack'}.</p>`)
+  +(old.length?`<div style="padding:10px 12px 0" class="tag"><b>Older dispatches (serial-number based)</b></div><table class="oneline"><thead><tr><th>Dispatch #</th><th>Date</th><th>Customer</th><th>City</th><th>WO #</th>
+    <th class="num">Pcs</th><th>Invoice</th><th>Inv. date</th><th>Vehicle</th><th class="num"></th></tr></thead><tbody>`+
+    old.map(d=>`<tr><td><b>${escH(d.no)}</b></td><td>${dmy(d.date)}</td><td class="ell" title="${escH(d.cust)}">${escH(d.cust||'-')}</td><td class="ell">${escH(d.city||'-')}</td>
+      <td class="ell">${escH((d.woNums||[]).join(', '))}</td><td class="num">${(d.serialIds||[]).length}</td>
       <td>${escH(d.invoiceNo||'-')}</td><td>${dmy(d.invoiceDate)}</td><td>${escH(d.vehicle||'-')}</td>
-      <td class="ell" title="${escH([d.transporter,d.lr].filter(Boolean).join(' · '))}">${escH([d.transporter,d.lr].filter(Boolean).join(' · ')||'-')}</td>
-      <td class="num acts"><button class="btn ghost sm" onclick='printDispatch(${JSON.stringify(d.id)})'>🖨 Slip</button>
-        ${canDocs()?`<button class="btn ghost sm" onclick='dispatchModal(${JSON.stringify(d.id)})'>Edit</button>`:''}</td></tr>`).join('')+`</tbody></table>`
-    :`<p class="muted small" style="padding:14px">No dispatches yet.</p>`;
+      <td class="num acts"><button class="btn ghost sm" onclick='printDispatch(${JSON.stringify(d.id)})'>🖨</button>
+        ${canDocs()?`<button class="btn ghost sm" onclick='dispatchModal(${JSON.stringify(d.id)})'>Edit</button>`:''}</td></tr>`).join('')+`</tbody></table>`:'');
 }
 let DP_SEL=new Set();
 function dispatchModal(id){
@@ -3278,12 +3293,12 @@ function prodDashHTML(){
   if(!ERP_OK)return '';
   const t=today(), mk=monthKey(t);
   const prog=DB.orders.map(o=>({o,p:woProgress(o)}));
-  const open=prog.filter(x=>['Open','In production'].includes(x.p.st));
+  const open=prog.filter(x=>['Open','In production','Part packed'].includes(x.p.st));
   const late=open.filter(x=>x.p.due&&x.p.due<t);
-  const madeToday=DB.serials.filter(s=>s.status!=='void'&&s.mfgDate===t).length;
-  const madeMonth=DB.serials.filter(s=>s.status!=='void'&&monthKey(s.mfgDate)===mk).length;
-  const dispMonth=DB.serials.filter(s=>s.status==='dispatched'&&monthKey(s.dispDate)===mk).length;
-  const waiting=DB.serials.filter(s=>s.status==='stock').length;
+  const madeToday=slips().filter(p=>p.date===t).reduce((a,p)=>a+psQty(p),0)+DB.serials.filter(s=>s.status!=='void'&&s.mfgDate===t).length;
+  const madeMonth=slips().filter(p=>monthKey(p.date)===mk).reduce((a,p)=>a+psQty(p),0)+DB.serials.filter(s=>s.status!=='void'&&monthKey(s.mfgDate)===mk).length;
+  const dispMonth=slips().filter(p=>monthKey(p.date)===mk).length;
+  const waiting=slips().filter(p=>!psInvoices(p).length).length;
   const low=DB.materials.filter(m=>stockStatus(m)[0]!=='ok').length;
   const openClaims=DB.claims.filter(c=>!['rejected','closed'].includes(c.status)).length;
   // material planned vs issued for this month's work orders
@@ -3295,7 +3310,7 @@ function prodDashHTML(){
   return `<div class="card" style="margin-top:4px"><div class="row"><b>🏭 Production</b><span class="tag">${dmy(t)}</span><div class="spacer"></div>
       <button class="btn ghost sm" onclick="go('wo');showWO('prod')">Open production</button></div>
     <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(130px,1fr));margin-top:10px">
-      ${k(madeToday,'Made today')}${k(madeMonth,'Made this month')}${k(dispMonth,'Dispatched this month')}${k(waiting,'Ready, not dispatched')}
+      ${k(madeToday,'Pieces packed today')}${k(madeMonth,'Pieces packed this month')}${k(dispMonth,'Packing slips this month')}${k(waiting,'Slips waiting for invoice',waiting?'var(--warn)':'')}
       ${k(open.length,'Open work orders')}${k(late.length,'Delayed orders',late.length?'var(--danger)':'')}${k(low,'Materials low',low?'var(--warn)':'')}${k(openClaims,'Open warranty claims',openClaims?'var(--warn)':'')}
     </div>
     ${late.length?`<div style="margin-top:12px;overflow:auto"><b class="small">Delayed work orders</b><table class="oneline" style="margin-top:4px"><thead><tr><th>WO #</th><th>Customer</th><th>Model</th><th class="num">Qty</th><th>Due</th><th class="num">Days late</th><th>Made</th></tr></thead><tbody>
@@ -3306,6 +3321,152 @@ function prodDashHTML(){
         return `<tr><td class="ell" style="max-width:240px">${escH(x.m.name)}</td><td class="num">${fmt(x.p,3)}</td><td class="num">${fmt(x.i,3)}</td><td class="num">${Math.abs(d)<0.0005?'0':(d>0?'+':'')+fmt(d,3)}</td><td>${x.m.unit}</td><td><span class="pill ${c[0]}">${c[1]}</span></td></tr>`;}).join('')}</tbody></table></div>`:''}
   </div>`;
 }
+/* ==================== PACKING SLIPS (Oct 2026) ====================
+   "📦 Pack" in Production creates a packing slip for what is actually leaving the factory.
+   A slip can carry several work orders (same customer) and part quantities.
+   It is stored in the dispatches table with kind:'ps'. The office makes the Tally invoice
+   from it, uploads the invoice PDF against the slip, and Claude checks invoice vs slip. */
+function isPS(d){return d&&d.kind==='ps';}
+function slips(){return (DB.dispatches||[]).filter(isPS);}
+function psById(id){return (DB.dispatches||[]).find(d=>d.id===id&&isPS(d));}
+function packedQty(woId,exceptPsId){return slips().filter(p=>p.id!==exceptPsId).reduce((s,p)=>s+(p.lines||[]).filter(l=>l.woId===woId).reduce((a,l)=>a+(+l.qty||0),0),0);}
+function legacyDisp(woId){return (DB.serials||[]).filter(s=>s.woId===woId&&s.status==='dispatched').length;}
+function woRemaining(o,exceptPsId){return Math.max(0,(+o.Q||0)-packedQty(o.id,exceptPsId)-legacyDisp(o.id));}
+function slipsOf(woId){return slips().filter(p=>(p.lines||[]).some(l=>l.woId===woId));}
+function psQty(p){return (p.lines||[]).reduce((s,l)=>s+(+l.qty||0),0);}
+function psInvoices(p){return (DB.woDocs||[]).filter(d=>d.kind==='invoice'&&d.psId===p.id);}
+function companyName(){return (DB.settings&&DB.settings.companyName)||'Napcat & Orthonap';}
+
+let PSL=[];
+function psModal(id,woId){
+  if(!ERP_OK)return alert('Run erp_setup.sql in Supabase first.');
+  const p=id?psById(id):null; const o0=woId?DB.orders.find(o=>o.id===woId):null;
+  const d=p||{date:today(),cust:o0?o0.cust:'',city:o0?o0.city:'',agent:o0?o0.agent:'',address:'',phone:'',vehicle:'',transporter:'',lr:'',driver:'',remarks:''};
+  PSL=p?JSON.parse(JSON.stringify(p.lines)):(o0?[{woId:o0.id,qty:woRemaining(o0)}]:[]);
+  openModal(`<div class="row"><b style="font-size:16px">${p?'Edit packing slip '+escH(p.no):'New packing slip'}</b><div class="spacer"></div><button class="btn ghost sm" onclick="closeModal()">Cancel</button></div>
+    <div class="grid g3" style="margin-top:12px">
+      <div><label class="f">Date</label><input id="psDate" type="date" value="${d.date}"></div>
+      <div><label class="f">Customer</label><input id="psCust" value="${escH(d.cust||'')}" list="dlPsCust" autocomplete="off"><datalist id="dlPsCust">${uniq(DB.orders.map(o=>o.cust)).map(c=>`<option value="${escH(c)}">`).join('')}</datalist></div>
+      <div><label class="f">City</label><input id="psCity" value="${escH(d.city||'')}"></div>
+      <div style="grid-column:1/3"><label class="f">Delivery address</label><input id="psAddr" value="${escH(d.address||'')}" placeholder="door no, street, area, city, PIN"></div>
+      <div><label class="f">Contact phone</label><input id="psPhone" value="${escH(d.phone||'')}"></div>
+      <div><label class="f">Agent</label><input id="psAgent" value="${escH(d.agent||'')}"></div>
+      <div><label class="f">Vehicle no</label><input id="psVeh" value="${escH(d.vehicle||'')}" placeholder="TN 33 AB 1234"></div>
+      <div><label class="f">Driver name / phone</label><input id="psDrv" value="${escH(d.driver||'')}"></div>
+      <div><label class="f">Transporter</label><input id="psTr" value="${escH(d.transporter||'')}"></div>
+      <div><label class="f">LR / Docket no</label><input id="psLR" value="${escH(d.lr||'')}"></div>
+      <div><label class="f">Remarks</label><input id="psRem" value="${escH(d.remarks||'')}"></div>
+    </div>
+    <div class="divider"></div>
+    <div class="row"><b>Items packed</b><span class="tag">quantity leaving now · part quantities are fine</span></div>
+    <div id="psLines" style="margin-top:6px;overflow:auto"></div>
+    <div class="row" style="margin-top:8px">
+      <input id="psAddWO" list="dlPsWO" placeholder="+ add another work order (WO #)…" style="max-width:320px" autocomplete="off" onchange="psAddLine(this.value);this.value=''">
+      <datalist id="dlPsWO"></datalist></div>
+    <div class="banner" id="psErr"></div><div class="divider"></div>
+    <div class="row"><label class="row small muted" style="gap:6px;cursor:pointer"><input type="checkbox" id="psPrint" style="width:auto" checked> Print packing slip after saving</label>
+      <div class="spacer"></div><button class="btn g" onclick='commitPS(${JSON.stringify(id||null)})'>${p?'Save changes':'Create packing slip'}</button></div>`);
+  window.__psEditing=id||null; renderPSLines();
+}
+function renderPSLines(){
+  const ex=window.__psEditing;
+  document.getElementById('psLines').innerHTML=PSL.length?`<table class="oneline"><thead><tr><th>WO #</th><th>Product</th><th class="num">Size (in)</th><th class="num">Ordered</th><th class="num">Already packed</th><th class="num">Pack now</th><th></th></tr></thead><tbody>
+    ${PSL.map((l,i)=>{const o=DB.orders.find(x=>x.id===l.woId)||{};const rem=woRemaining(o,ex);
+      return `<tr><td><b>${escH(o.num||'?')}</b></td><td class="ell" title="${escH((o.brand||'')+' '+(o.model||''))}">${escH(o.brand||'')} ${escH(o.model||'')}</td>
+        <td class="num">${o.L}×${o.W}×${o.H}</td><td class="num">${o.Q}</td><td class="num">${(+o.Q||0)-rem}</td>
+        <td class="num"><input type="number" min="1" value="${l.qty}" style="max-width:80px;padding:5px 7px;text-align:right" oninput="PSL[${i}].qty=+this.value"></td>
+        <td class="num"><button class="btn danger ghost sm" onclick="PSL.splice(${i},1);renderPSLines()">✕</button></td></tr>`;}).join('')}</tbody></table>`
+    :'<p class="muted small">Add the work order(s) being packed.</p>';
+  const cust=(val('psCust')||'').toLowerCase();
+  const opts=DB.orders.filter(o=>woRemaining(o,ex)>0&&!PSL.some(l=>l.woId===o.id))
+    .sort((a,b)=>((b.cust||'').toLowerCase()===cust)-((a.cust||'').toLowerCase()===cust));
+  document.getElementById('dlPsWO').innerHTML=opts.map(o=>`<option value="${escH(o.num)}">${escH(o.num)} · ${escH(o.cust||'')} · ${escH(o.model)} ${o.L}×${o.W}×${o.H} · ${woRemaining(o,ex)} left</option>`).join('');
+}
+function psAddLine(num){const o=DB.orders.find(x=>String(x.num).toLowerCase()===String(num).trim().toLowerCase());
+  if(!o)return; if(PSL.some(l=>l.woId===o.id))return;
+  PSL.push({woId:o.id,qty:woRemaining(o,window.__psEditing)||1});
+  if(!val('psCust')){document.getElementById('psCust').value=o.cust||'';document.getElementById('psCity').value=o.city||'';document.getElementById('psAgent').value=o.agent||'';}
+  renderPSLines();}
+function commitPS(id){
+  const err=t=>{const b=document.getElementById('psErr');b.className='banner err';b.textContent=t;};
+  const lines=PSL.filter(l=>+l.qty>0);
+  if(!lines.length)return err('Add at least one work order with a quantity.');
+  if(!val('psCust'))return err('Customer is required.');
+  const over=lines.map(l=>{const o=DB.orders.find(x=>x.id===l.woId);return {o,l,rem:woRemaining(o,id)};}).filter(x=>x.l.qty>x.rem);
+  if(over.length&&!confirm('More than the work order quantity:\n'+over.map(x=>`${x.o.num}: packing ${x.l.qty}, only ${x.rem} left`).join('\n')+'\n\nSave anyway?'))return;
+  const p=id?psById(id):{id:uid(),kind:'ps',no:seqRef('PS-',DB.psSeq++),by:CURRENT_USER.name,at:nowISO(),createdAt:nowISO()};
+  Object.assign(p,{date:document.getElementById('psDate').value||today(),cust:val('psCust'),city:val('psCity'),address:val('psAddr'),phone:val('psPhone'),
+    agent:val('psAgent'),vehicle:val('psVeh'),driver:val('psDrv'),transporter:val('psTr'),lr:val('psLR'),remarks:val('psRem'),
+    lines:lines.map(l=>{const o=DB.orders.find(x=>x.id===l.woId);return {woId:o.id,woNum:o.num,brand:o.brand,model:o.model,L:o.L,W:o.W,H:o.H,qty:+l.qty};})});
+  p.woNums=p.lines.map(l=>l.woNum);
+  if(!id)DB.dispatches.push(p); else logEdit(p);
+  const pr=document.getElementById('psPrint').checked;
+  save(); closeModal();
+  if(CURRENT_VIEW==='wo')renderWO(); else if(CURRENT_VIEW==='dispatch')renderDispatch();
+  if(pr)printPS(p.id);
+}
+function psSlipHTML(p,copy){
+  const tot=psQty(p);
+  return `<div class="wo-sheet" style="page-break-after:always;margin-bottom:12px">
+    <div class="h"><div><div class="t">PACKING SLIP</div><div class="tag">${escH(companyName())} · ${copy}</div></div>
+      <div style="text-align:right"><div class="tag">SLIP #</div><div class="t">${escH(p.no)}</div><div class="tag">${dmy(p.date)}</div></div></div>
+    <div class="meta">
+      <div style="grid-column:span 2"><div class="lbl">Customer</div><div class="val">${escH(p.cust)}</div><div class="tag">${escH([p.address,p.city].filter(Boolean).join(', '))}${p.phone?' · ☎ '+escH(p.phone):''}</div></div>
+      <div><div class="lbl">Agent</div><div class="val">${escH(p.agent||'-')}</div></div>
+      <div style="border-right:none"><div class="lbl">Total pieces</div><div class="val">${tot}</div></div>
+      <div><div class="lbl">Vehicle</div><div class="val">${escH(p.vehicle||'-')}</div></div>
+      <div><div class="lbl">Driver</div><div class="val">${escH(p.driver||'-')}</div></div>
+      <div><div class="lbl">Transporter</div><div class="val">${escH(p.transporter||'-')}</div></div>
+      <div style="border-right:none"><div class="lbl">LR / Docket</div><div class="val">${escH(p.lr||'-')}</div></div>
+    </div>
+    <table><thead><tr><th style="text-align:left">#</th><th style="text-align:left">WO #</th><th style="text-align:left">Product</th><th style="text-align:center">Size (L×B×H in)</th><th style="text-align:center">Qty</th></tr></thead><tbody>
+      ${p.lines.map((l,i)=>`<tr><td style="text-align:left">${i+1}</td><td style="text-align:left">${escH(l.woNum)}</td><td style="text-align:left">${escH(l.brand)} ${escH(l.model)}</td><td style="text-align:center">${l.L} × ${l.W} × ${l.H}</td><td style="text-align:center"><b>${l.qty}</b></td></tr>`).join('')}
+      <tr><td></td><td></td><td style="text-align:left"><b>Total</b></td><td></td><td style="text-align:center"><b>${tot}</b></td></tr></tbody></table>
+    ${p.remarks?`<div style="padding:10px 14px" class="tag"><b>Remarks:</b> ${escH(p.remarks)}</div>`:''}
+    <div style="display:flex;justify-content:space-between;padding:34px 14px 14px;font-size:12px"><span>Packed by: ${escH(p.by||'')}</span><span>Driver signature</span><span>Received in good condition</span></div>
+  </div>`;
+}
+function printPS(id){const p=psById(id); if(!p)return;
+  document.getElementById('printArea').innerHTML=`<style>@page{size:A4;margin:12mm}</style>${psSlipHTML(p,'Customer copy')}${psSlipHTML(p,'Office copy — for invoicing')}`;
+  setTimeout(()=>window.print(),50);}
+function viewPS(id){const p=psById(id); if(!p)return;
+  const inv=psInvoices(p);
+  openModal(`<div class="row"><b style="font-size:16px">Packing slip ${escH(p.no)}</b><div class="spacer"></div>
+      <button class="btn ghost sm" onclick='printPS(${JSON.stringify(id)})'>🖨 Print</button>
+      <button class="btn ghost sm" onclick='closeModal();psModal(${JSON.stringify(id)})'>Edit</button>
+      <button class="btn ghost sm" onclick="closeModal()">Close</button></div>
+    <div style="margin-top:12px">${psSlipHTML(p,'')}</div>
+    ${DOCS_OK?`<div class="divider"></div><div class="row"><b>Invoices</b><span class="tag">${inv.length}</span><div class="spacer"></div>
+      ${canDocs()?`<button class="btn ghost sm" onclick='uploadDocModal("invoice",${JSON.stringify(id)})'>＋ Upload invoice</button>`:''}</div>
+      ${inv.length?`<table class="oneline" style="margin-top:6px"><tbody>${inv.map(d=>`<tr><td><b>${escH(d.docNo)}</b></td><td>${escH(d.docDate||'')}</td>
+        <td>${d.check?`<span style="cursor:pointer" onclick='showCheck(${JSON.stringify(d.id)})'>${verdictPill(d)}</span>`:verdictPill(d)}</td>
+        <td class="num"><button class="btn ghost sm" onclick='openDocFile(${JSON.stringify(d.id)})'>📄</button>
+        ${canDocs()?`<button class="btn sm" title="Check with Claude" onclick='closeModal();runCheck(${JSON.stringify(d.id)})'>🤖</button>`:''}</td></tr>`).join('')}</tbody></table>`
+      :`<div class="muted small">No invoice uploaded yet.</div>`}`:''}`);
+}
+function psInvCell(p){
+  if(!DOCS_OK)return '';
+  const ds=psInvoices(p);
+  if(!ds.length)return `<span class="pill pend" title="Office has not uploaded the invoice yet">Not invoiced</span>`;
+  const bad=ds.filter(isIssue).length, pend=ds.filter(d=>!d.check).length;
+  const [c,t]=bad?['crit',`⚠ ${ds.length}`]:pend?['pend',`${ds.length} · not checked`]:['ok',`✓ ${ds.length}`];
+  return `<span class="pill ${c}" style="cursor:pointer" onclick='openDocTab("invoice",${JSON.stringify(p.no)})'>${t}</span>`;
+}
+function slipsModal(woId){const o=DB.orders.find(x=>x.id===woId); const ps=slipsOf(woId);
+  openModal(`<div class="row"><b style="font-size:16px">Packing slips — ${escH(o.num)}</b><div class="spacer"></div><button class="btn ghost sm" onclick="closeModal()">Close</button></div>
+    <table class="oneline" style="margin-top:10px"><thead><tr><th>Slip #</th><th>Date</th><th class="num">Qty (this WO)</th><th>Vehicle</th><th>Invoice</th><th class="num"></th></tr></thead><tbody>
+    ${ps.map(p=>`<tr><td><b>${escH(p.no)}</b></td><td>${dmy(p.date)}</td><td class="num">${p.lines.filter(l=>l.woId===woId).reduce((s,l)=>s+l.qty,0)}</td><td>${escH(p.vehicle||'-')}</td><td>${psInvCell(p)}</td>
+      <td class="num acts"><button class="btn ghost sm" onclick='closeModal();viewPS(${JSON.stringify(p.id)})'>View</button><button class="btn ghost sm" onclick='printPS(${JSON.stringify(p.id)})'>🖨</button></td></tr>`).join('')}</tbody></table>`);
+}
+async function delPS(id){const p=psById(id); if(!p)return;
+  if(!delAllowed(p,'Packing slip '+p.no))return;
+  const inv=psInvoices(p);
+  if(!confirm(`Delete packing slip ${p.no} completely?${inv.length?`\n\n• ${inv.length} uploaded invoice PDF(s) will be deleted too`:''}\n\nThis cannot be undone.`))return;
+  DB.dispatches=DB.dispatches.filter(d=>d.id!==id); save();
+  for(const d of inv){try{await sb.from('wo_docs').delete().eq('id',d.id); await sb.storage.from(DOC_BUCKET).remove([d.path]);}catch(e){console.error(e);}}
+  if(inv.length)DB.woDocs=DB.woDocs.filter(d=>d.psId!==id);
+  renderDispatch();
+}
 
 /* ============================ INVOICES & TALLY WO (PDF documents) ============================ */
 // Each uploaded PDF is one row in table `wo_docs`; the file itself lives in Storage bucket `wo-docs`.
@@ -3314,13 +3475,13 @@ const DOC_KINDS={invoice:{label:'Invoice',plural:'Invoices',noLabel:'Invoice No'
                  tally:{label:'Tally WO',plural:'Tally Work Orders',noLabel:'Tally WO No'},
                  tallycut:{label:'Tally Cutting',plural:'Tally cutting orders',noLabel:'Tally voucher No',parent:'cut'}};
 // a document belongs to a work order, or (Tally Cutting) to a block cutting order
-function parentOf(d){return d.kind==='tallycut'?DB.cuts.find(c=>c.id===d.woId):woById(d.woId);}
+function parentOf(d){return d.kind==='tallycut'?DB.cuts.find(c=>c.id===d.woId):d.psId?psById(d.psId):woById(d.woId);}
 function cutBrief(c){if(!c)return '';const r=c.result;
   return `${cutGradeName(c)} · ${c.v===3?c.blocks.length:c.qty} block(s) · ${fmt(blockCFT(c),2)} CFT`+(r?` · sheets ${fmt(r.sheetsCFT,2)} · contingent ${fmt(cutCont(c),2)} CFT`:' · result not recorded');}
 let DOCS_OK=false, DOC_BUSY={};
 function canDocs(){return !!CURRENT_USER&&(CURRENT_USER.role==='admin'||CURRENT_USER.role==='office');}
 function escH(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
-function docsFor(woId,kind){return (DB.woDocs||[]).filter(d=>d.woId===woId&&(!kind||d.kind===kind));}
+function docsFor(woId,kind){return (DB.woDocs||[]).filter(d=>(d.woId===woId||(d.woIds||[]).includes(woId))&&(!kind||d.kind===kind));}
 function woById(id){return DB.orders.find(o=>o.id===id);}
 
 async function loadDocs(){
@@ -3403,6 +3564,7 @@ function renderDocTab(kind){
   const isCut=kind==='tallycut';
   box.innerHTML=list.length?`<table class="oneline"><thead><tr>
       ${isCut?'<th>Cut #</th><th>Grade</th><th class="num">Blocks</th><th class="num">Block CFT</th><th class="num">Sheets CFT</th><th class="num">Contingent</th>'
+        :kind==='invoice'?'<th>Slip / WO #</th><th>Customer</th><th>Model</th><th class="num">Size</th><th class="num">Qty</th>'
         :'<th>WO #</th><th>Customer</th><th>Model</th><th class="num">Size</th><th class="num">Qty</th>'}
       <th>${K.noLabel}</th><th>Date</th><th>Uploaded</th><th>Claude check</th><th class="num"></th></tr></thead><tbody>`+
     list.map(d=>{const o=parentOf(d);
@@ -3410,6 +3572,9 @@ function renderDocTab(kind){
         <td><b>${escH(d.woNum)}</b></td>
         ${isCut?`<td class="ell">${escH(o?cutGradeName(o):'(deleted)')}</td><td class="num">${o?(o.v===3?o.blocks.length:o.qty):'-'}</td>
           <td class="num">${o?fmt(blockCFT(o),2):'-'}</td><td class="num">${o&&o.result?fmt(o.result.sheetsCFT,2):'—'}</td><td class="num">${o&&o.result?fmt(cutCont(o),2):'—'}</td>`
+        :d.psId?`<td class="ell" title="${escH(o?o.cust:'')}">${escH(o?o.cust||'-':'(deleted slip)')}</td>
+        <td class="ell" title="${escH(o?o.lines.map(l=>l.qty+'× '+l.model+' '+l.L+'×'+l.W+'×'+l.H).join(', '):'')}">${escH(o?(o.lines[0].model+(o.lines.length>1?' +'+(o.lines.length-1)+' more':'')):'-')}</td>
+        <td class="num">${o?`${o.lines[0].L}×${o.lines[0].W}×${o.lines[0].H}`:'-'}</td><td class="num">${o?psQty(o):'-'}</td>`
         :`<td class="ell" title="${escH(o?o.cust:'')}">${escH(o?o.cust||'-':'(deleted WO)')}</td>
         <td class="ell" title="${escH(o?o.brand+' · '+o.model:'')}">${escH(o?o.model:'-')}</td>
         <td class="num">${o?`${o.L}×${o.W}×${o.H}`:'-'}</td><td class="num">${o?o.Q:'-'}</td>`}
@@ -3418,7 +3583,7 @@ function renderDocTab(kind){
         <td>${d.check?`<span style="cursor:pointer" onclick='showCheck(${JSON.stringify(d.id)})'>${verdictPill(d)}</span>`:verdictPill(d)}</td>
         <td class="num acts">
           <button class="btn ghost sm" title="Open PDF" onclick='openDocFile(${JSON.stringify(d.id)})'>📄</button>
-          ${canRun?`<button class="btn sm" title="${d.check?'Re-check':'Check'} with Claude" ${DOC_BUSY[d.id]?'disabled':''} onclick='runCheck(${JSON.stringify(d.id)})'>🤖</button>`:''}
+          ${canRun?`<button class="btn sm" title="${d.check?'Re-check':'Check'} with Claude${d.psId?' (invoice vs packing slip)':''}" ${DOC_BUSY[d.id]?'disabled':''} onclick='runCheck(${JSON.stringify(d.id)})'>🤖</button>`:''}
           ${d.check?`<button class="btn ghost sm" title="Claude's result" onclick='showCheck(${JSON.stringify(d.id)})'>Result</button>`:''}
           ${isIssue(d)&&canResolve()?`<button class="btn ghost sm" style="color:var(--accent2)" title="Differences are not important — mark as OK" onclick='acceptModal(${JSON.stringify(d.id)})'>✓</button>`:''}
           ${canRun?`<button class="btn danger ghost sm" title="Delete" onclick='delDoc(${JSON.stringify(d.id)})'>✕</button>`:''}
@@ -3429,15 +3594,17 @@ function renderDocTab(kind){
 function uploadDocModal(kind,woId){
   if(!canDocs()){alert('Only admin and office users can upload.');return;}
   if(!DOCS_OK){alert('Document storage is not set up yet in Supabase. See the setup guide.');return;}
-  const K=DOC_KINDS[kind], isCut=kind==='tallycut';
-  const opts=isCut?DB.cuts.slice().reverse().map(c=>`<option value="${escH(c.no)}">${escH(c.no)} · ${escH(c.date||'')} · ${escH(cutBrief(c))}</option>`).join('')
+  const K=DOC_KINDS[kind], isCut=kind==='tallycut', isInv=kind==='invoice';
+  const opts=isInv?slips().slice().reverse().map(p=>`<option value="${escH(p.no)}">${escH(p.no)} · ${dmy(p.date)} · ${escH(p.cust)} · ${psQty(p)} pcs · ${escH(p.woNums.join(', '))}</option>`).join('')
+    :isCut?DB.cuts.slice().reverse().map(c=>`<option value="${escH(c.no)}">${escH(c.no)} · ${escH(c.date||'')} · ${escH(cutBrief(c))}</option>`).join('')
     :DB.orders.slice().reverse().map(o=>`<option value="${escH(o.num)}">${escH(o.num)} · ${escH(o.cust||'')} · ${escH(o.model)} ${o.L}×${o.W}×${o.H} × ${o.Q}</option>`).join('');
-  const pre=woId?(isCut?(DB.cuts.find(c=>c.id===woId)||{}).no:(woById(woId)||{}).num):'';
+  const pre=woId?(isInv?((psById(woId)||{}).no||((slipsOf(woId)[0]||{}).no)||''):isCut?(DB.cuts.find(c=>c.id===woId)||{}).no:(woById(woId)||{}).num):'';
+  if(isInv&&!slips().length){alert('Create a packing slip first (Workorder → Production → 📦 Pack). Invoices are uploaded against packing slips.');return;}
   openModal(`<div class="row"><b style="font-size:16px">Upload ${K.label} (PDF)</b><div class="spacer"></div>
       <button class="btn ghost sm" onclick="closeModal()">Cancel</button></div>
     <div class="grid g2" style="margin-top:12px">
-      <div style="grid-column:1/-1"><label class="f">Against ${isCut?'cutting order':'work order'}</label>
-        <input id="dWO" list="dlWOnum" value="${escH(pre||'')}" placeholder="${isCut?'type cutting order number…':'type WO number or customer…'}" autocomplete="off">
+      <div style="grid-column:1/-1"><label class="f">Against ${isInv?'packing slip':isCut?'cutting order':'work order'}</label>
+        <input id="dWO" list="dlWOnum" value="${escH(pre||'')}" placeholder="${isInv?'type packing slip number or customer…':isCut?'type cutting order number…':'type WO number or customer…'}" autocomplete="off">
         <datalist id="dlWOnum">${opts}</datalist></div>
       <div><label class="f">${K.noLabel}</label><input id="dNo" placeholder="${kind==='invoice'?'e.g. NC/245/26-27':isCut?'e.g. SJ-57':'e.g. TWO-118'}"></div>
       <div><label class="f">${K.label} date</label><input id="dDate" type="date" value="${today()}"></div>
@@ -3451,8 +3618,10 @@ function uploadDocModal(kind,woId){
 async function commitDoc(kind){
   const err=m=>{const b=document.getElementById('dErr');b.className='banner err';b.textContent=m;};
   const woTxt=document.getElementById('dWO').value.trim();
-  const isCut=kind==='tallycut';
-  const o=isCut?DB.cuts.find(x=>String(x.no).toLowerCase()===woTxt.toLowerCase()):DB.orders.find(x=>String(x.num).toLowerCase()===woTxt.toLowerCase());
+  const isCut=kind==='tallycut', isInv=kind==='invoice';
+  const ps=isInv?slips().find(x=>String(x.no).toLowerCase()===woTxt.toLowerCase()):null;
+  if(isInv&&!ps)return err('Pick a packing slip from the list.');
+  const o=isInv?(DB.orders.find(x=>x.id===ps.lines[0].woId)||{id:ps.lines[0].woId}):isCut?DB.cuts.find(x=>String(x.no).toLowerCase()===woTxt.toLowerCase()):DB.orders.find(x=>String(x.num).toLowerCase()===woTxt.toLowerCase());
   if(!o)return err(isCut?'Pick a cutting order from the list.':'Pick a work order from the list.');
   const docNo=document.getElementById('dNo').value.trim();
   if(!docNo)return err(DOC_KINDS[kind].noLabel+' is required.');
@@ -3462,11 +3631,12 @@ async function commitDoc(kind){
   if(f.size>10*1024*1024)return err('File is larger than 10 MB.');
   const btn=document.getElementById('dSave'); btn.disabled=true; btn.textContent='Uploading…';
   const id=uid();
-  const path=`${kind}/${o.id}/${id}.pdf`;
+  const path=`${kind}/${isInv?ps.id:o.id}/${id}.pdf`;
   try{
     const up=await sb.storage.from(DOC_BUCKET).upload(path,f,{contentType:'application/pdf',upsert:false});
     if(up.error)throw up.error;
-    const d={id,woId:o.id,woNum:isCut?o.no:o.num,kind,docNo,docDate:document.getElementById('dDate').value,
+    const d={id,woId:o.id,woNum:isInv?ps.no:isCut?o.no:o.num,kind,docNo,
+      ...(isInv?{psId:ps.id,woIds:ps.lines.map(l=>l.woId)}:{}),docDate:document.getElementById('dDate').value,
       path,fileName:f.name,size:f.size,by:CURRENT_USER.name,at:new Date().toISOString(),check:null};
     await pushDoc(d);
     DB.woDocs.push(d);
@@ -3573,17 +3743,17 @@ async function reopenDoc(id){
 }
 function showCheck(id){
   const d=(DB.woDocs||[]).find(x=>x.id===id); if(!d||!d.check)return;
-  const c=d.check, o=parentOf(d)||{}, K=DOC_KINDS[d.kind], isCut=d.kind==='tallycut';
+  const c=d.check, o=parentOf(d)||{}, K=DOC_KINDS[d.kind], isCut=d.kind==='tallycut', isPSd=!!d.psId;
   const rowCls={ok:'ok',mismatch:'crit',missing:'crit',info:'pend'};
   const rowTxt={ok:'✓ OK',mismatch:'✗ Different',missing:'✗ Missing',info:'Info'};
   openModal(`<div class="row"><b style="font-size:16px">Claude check — ${K.label} ${escH(d.docNo)} vs ${escH(d.woNum)}</b><div class="spacer"></div>
       <button class="btn ghost sm" onclick='openDocFile(${JSON.stringify(d.id)})'>📄 PDF</button>
-      ${isCut?`<button class="btn ghost sm" onclick='viewCut(${JSON.stringify(d.woId)})'>Cutting order</button>`:`<button class="btn ghost sm" onclick='viewWO(${JSON.stringify(d.woId)})'>Work order</button>`}
+      ${isPSd?`<button class="btn ghost sm" onclick='viewPS(${JSON.stringify(d.psId)})'>Packing slip</button>`:isCut?`<button class="btn ghost sm" onclick='viewCut(${JSON.stringify(d.woId)})'>Cutting order</button>`:`<button class="btn ghost sm" onclick='viewWO(${JSON.stringify(d.woId)})'>Work order</button>`}
       <button class="btn ghost sm" onclick="closeModal()">Close</button></div>
     <div style="margin-top:12px" class="row">${verdictPill(d)}<span class="small">${escH(c.summary||'')}</span></div>
-    <div class="tag" style="margin-top:6px">${isCut?escH(cutBrief(o)):`${escH(o.cust||'')} · ${escH(o.brand||'')} ${escH(o.model||'')} · ${o.L}×${o.W}×${o.H} · Qty ${o.Q}`}
+    <div class="tag" style="margin-top:6px">${isPSd?escH(`${o.no||''} · ${o.cust||''} · ${(o.lines||[]).map(l=>l.qty+'× '+l.model+' '+l.L+'×'+l.W+'×'+l.H).join(', ')}`):isCut?escH(cutBrief(o)):`${escH(o.cust||'')} · ${escH(o.brand||'')} ${escH(o.model||'')} · ${o.L}×${o.W}×${o.H} · Qty ${o.Q}`}
       ${c.document&&c.document.party?` · PDF party: ${escH(c.document.party)}`:''}${c.document&&c.document.total_amount?` · Amount: ${escH(c.document.total_amount)}`:''}</div>
-    <div style="overflow:auto;margin-top:10px"><table class="oneline"><thead><tr><th>Item</th><th>${isCut?'Cutting order (app)':'Work order'}</th><th>${K.label} PDF</th><th>Result</th><th>Note</th></tr></thead><tbody>
+    <div style="overflow:auto;margin-top:10px"><table class="oneline"><thead><tr><th>Item</th><th>${isPSd?'Packing slip':isCut?'Cutting order (app)':'Work order'}</th><th>${K.label} PDF</th><th>Result</th><th>Note</th></tr></thead><tbody>
       ${(c.checks||[]).map(x=>`<tr><td><b>${escH(x.item)}</b></td><td>${escH(x.work_order)}</td><td>${escH(x.document)}</td>
         <td><span class="pill ${rowCls[x.status]||'pend'}">${rowTxt[x.status]||escH(x.status)}</span></td><td class="small wrap">${escH(x.note||'')}</td></tr>`).join('')}
     </tbody></table></div>
@@ -3598,7 +3768,7 @@ function woDocsHTML(o){
   if(!DOCS_OK)return '';
   const part=kind=>{const K=DOC_KINDS[kind];const ds=docsFor(o.id,kind);
     return `<div style="margin-top:12px"><div class="row"><b>${K.plural}</b><span class="tag">${ds.length}</span><div class="spacer"></div>
-      ${canDocs()?`<button class="btn ghost sm" onclick='uploadDocModal("${kind}",${JSON.stringify(o.id)})'>＋ Upload ${K.label}</button>`:''}</div>
+      ${canDocs()&&(kind!=='invoice'||slipsOf(o.id).length)?`<button class="btn ghost sm" onclick='uploadDocModal("${kind}",${JSON.stringify(o.id)})'>＋ Upload ${K.label}</button>`:''}</div>
       ${ds.length?`<table class="oneline" style="margin-top:6px"><tbody>${ds.map(d=>`<tr>
         <td><b>${escH(d.docNo)}</b></td><td>${escH(d.docDate||'')}</td><td>${d.check?`<span style="cursor:pointer" onclick='showCheck(${JSON.stringify(d.id)})'>${verdictPill(d)}</span>`:verdictPill(d)}</td>
         <td class="num"><button class="btn ghost sm" onclick='openDocFile(${JSON.stringify(d.id)})'>📄 PDF</button>
