@@ -332,6 +332,7 @@
       <div class="card">
         <div class="row">
           <b>Tally work orders</b><span class="tag" id="docCount-tally"></span><div class="spacer"></div>
+          <button class="btn ghost sm" id="docRe-tally" onclick="checkAllDocs('tally',true)" style="display:none" title="Run Claude again on every Tally WO PDF with the latest checking rules">🔁 Re-check all</button>
           <button class="btn sm" id="docAll-tally" onclick="checkAllDocs('tally')" style="display:none"></button>
           <button class="btn g sm" id="docUp-tally" onclick="uploadDocModal('tally')">＋ Upload Tally WO PDF</button>
         </div>
