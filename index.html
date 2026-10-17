@@ -1325,7 +1325,7 @@ function initCreateWO(){
     bSel.dataset.built='1';
   }
   // autocomplete datalists from saved orders
-  fillDL('dlCust',uniq(DB.orders.map(o=>o.cust)));
+  fillDL('dlCust',customerNames());
   fillDL('dlCity',uniq(DB.orders.map(o=>o.city)));
   fillDL('dlAgent',uniq(DB.orders.map(o=>o.agent)));
   document.getElementById('woDateChip').textContent='📅 '+today();
@@ -1569,6 +1569,7 @@ function saveWO(){
   const {res,o}=formToOrder();
   if(res.errors.length){alert("Fix the highlighted errors before saving:\n\n"+res.errors.join("\n"));return;}
   if(!o.cust){alert("Enter a customer name.");return;}
+  { const c=custConfirm(o.cust); if(c==null){document.getElementById('woCust').focus();return;} o.cust=c; document.getElementById('woCust').value=c; }
   if(editingWO){
     const ex=DB.orders.find(x=>x.id===editingWO); Object.assign(ex,o); logEdit(ex);
     save();toast("Work order "+ex.num+" updated");editingWO=null;
@@ -3014,6 +3015,34 @@ function commitCompany(){const v=id=>document.getElementById(id).value.trim();
   DB.settings.company={name:v('coName'),gstin:v('coGst'),addr:v('coAddr'),phone:v('coPh'),note:v('coNote')};
   save(); closeModal(); renderPriceList(); toast('Company details saved');}
 
+
+/* ---------------------------- shared customer list (WO + packing slips + sales orders) ---------------------------- */
+function custKey(n){return String(n||'').toLowerCase().replace(/\b(m\/s|ms|mr|mrs|the)\b\.?/g,'').replace(/[^a-z0-9]/g,'');}
+function allCustomers(){
+  const m={};
+  const add=(name,info,at)=>{const k=custKey(name); if(!k)return;
+    const c=m[k]||(m[k]={name:String(name).trim(),n:0,city:'',phone:'',addr:'',gstin:'',at:''});
+    c.n++; ['city','phone','addr','gstin'].forEach(f=>{if(info[f]&&(!c[f]||(at||'')>=c.at))c[f]=String(info[f]).trim();});
+    if((at||'')>=c.at)c.at=at||c.at;};
+  DB.orders.forEach(o=>add(o.cust,{city:o.city},o.createdAt||o.date));
+  (DB.dispatches||[]).forEach(d=>add(d.cust,{city:d.city,phone:d.phone,addr:d.address},d.createdAt||d.date));
+  (DB.salesOrders||[]).forEach(so=>so.cust&&add(so.cust.name,{city:so.cust.city,phone:so.cust.phone,addr:so.cust.addr,gstin:so.cust.gstin},so.createdAt));
+  return m;
+}
+function customerNames(){return Object.values(allCustomers()).map(c=>c.name).sort((a,b)=>a.localeCompare(b));}
+function custFind(name){return allCustomers()[custKey(name)]||null;}
+function lev(a,b){const d=[];for(let i=0;i<=a.length;i++){d[i]=[i];}for(let j=1;j<=b.length;j++)d[0][j]=j;
+  for(let i=1;i<=a.length;i++)for(let j=1;j<=b.length;j++)d[i][j]=Math.min(d[i-1][j]+1,d[i][j-1]+1,d[i-1][j-1]+(a[i-1]===b[j-1]?0:1));return d[a.length][b.length];}
+function custSimilar(name){const k=custKey(name); if(k.length<3)return [];
+  return Object.entries(allCustomers()).filter(([kk])=>kk!==k&&((k.length>=4&&(kk.startsWith(k)||k.startsWith(kk)))||(Math.min(k.length,kk.length)>=5&&lev(k,kk)<=2))).map(([,c])=>c.name);}
+// returns the name to save (existing spelling if it's the same customer), or null if the user cancels
+function custConfirm(name){
+  const ex=custFind(name); if(ex)return ex.name;
+  const sim=custSimilar(name);
+  if(sim.length&&!confirm(`"${name}" looks like an existing customer:\n\n• ${sim.slice(0,6).join('\n• ')}\n\nPress Cancel to go back and pick the existing name, or OK to add "${name}" as a NEW customer.`))return null;
+  return name.trim();
+}
+
 /* ---------------------------- totals & status ---------------------------- */
 const PAY_TERMS=['100% advance with order','50% advance, balance before dispatch','Advance, balance on delivery','Credit — 15 days','Credit — 30 days','Credit — 45 days','Other (see note)'];
 const TRANSPORT={included:'Included in price',extra:'Extra — charged on this bill',topay:'Not included — customer pays transporter (to-pay)'};
@@ -3188,16 +3217,16 @@ function renderSOForm(){
   if(!SOF)SOF=blankSO();
   if(!(DB.priceList||[]).length){document.getElementById('soForm').innerHTML=`<div class="banner err" style="display:block">The price list is empty. ${isAdmin()?'Go to Admin Control ▸ Price list and import or enter prices first.':'Ask the admin to load the price list first.'}</div>`;return;}
   const s=SOF, ed=SO_EDIT?soById(SO_EDIT):null;
-  const custs=uniq((DB.salesOrders||[]).map(x=>x.cust&&x.cust.name));
+  const custs=customerNames();
   document.getElementById('soForm').innerHTML=`
     <div class="card"><div class="row"><b>${ed?'Editing '+escH(ed.no):'New sales order'}</b><span class="chip">${ed?escH(ed.no):'SO #: '+seqRef('SO-',DB.soSeq)+' (auto)'}</span><span class="chip">📅 ${dmy(ed?ed.date:today())}</span>
       ${ed&&ed.status==='rejected'?`<span class="pill crit">Rejected: ${escH(ed.rejectReason||'')}</span>`:''}</div>
       <div class="grid g3" style="margin-top:12px">
-        <div><label class="f">Customer / dealer name *</label><input value="${escH(s.cust.name)}" list="soCustDL" oninput="SOF.cust.name=this.value;soFillCust(this.value)"><datalist id="soCustDL">${custs.map(c=>`<option value="${escH(c)}">`).join('')}</datalist></div>
+        <div><label class="f">Customer / dealer name *</label><input id="soCustName" value="${escH(s.cust.name)}" list="soCustDL" autocomplete="off" placeholder="type 3 letters — pick an existing customer" oninput="SOF.cust.name=this.value;soFillCust(this.value)" onchange="soSnapCust()">
+          <div class="hint" id="soCustHint" style="margin-top:4px"></div><datalist id="soCustDL">${custs.map(c=>`<option value="${escH(c)}">`).join('')}</datalist></div>
         <div><label class="f">Phone</label><input id="soPh" value="${escH(s.cust.phone)}" oninput="SOF.cust.phone=this.value"></div>
         <div><label class="f">City / delivery place</label><input id="soCity" value="${escH(s.cust.city)}" oninput="SOF.cust.city=this.value"></div>
         <div><label class="f">Address</label><input id="soAddr" value="${escH(s.cust.addr)}" oninput="SOF.cust.addr=this.value"></div>
-        <div><label class="f">Customer GSTIN (optional)</label><input id="soGst" value="${escH(s.cust.gstin)}" oninput="SOF.cust.gstin=this.value"></div>
         <div><label class="f">Required by (optional)</label><input type="date" value="${escH(s.reqDate||'')}" oninput="SOF.reqDate=this.value"></div>
       </div></div>
     <div class="card"><div class="row"><b>Mattresses</b><span class="tag">prices come from the price list (without GST)</span><div class="spacer"></div>
@@ -3232,10 +3261,17 @@ function renderSOForm(){
       <button class="btn g" onclick="commitSO()">${ed&&ed.status==='approved'?'Save changes':'Submit for approval'}</button></div>`;
   soRefreshTotals();
 }
-function soFillCust(name){const p=(DB.salesOrders||[]).slice().reverse().find(x=>x.cust&&x.cust.name===name); if(!p)return;
-  ['phone','city','addr','gstin'].forEach(k=>{if(!SOF.cust[k]&&p.cust[k]){SOF.cust[k]=p.cust[k];}});
+function soFillCust(name){if(!SOF)return;
+  const h=document.getElementById('soCustHint'), c=custFind(name);
+  if(h){const sim=c?[]:custSimilar(name);
+    h.innerHTML=c?`✓ Existing customer${c.city?' · '+escH(c.city):''}`:sim.length?`⚠ Similar existing: ${sim.slice(0,4).map(n=>`<a href="#" onclick='soPickCust(${JSON.stringify(n)});return false'>${escH(n)}</a>`).join(', ')}`:(custKey(name).length>=3?'New customer':'');
+    h.style.color=c?'var(--accent2)':sim.length?'var(--warn)':'';}
+  if(!c)return;
+  ['phone','city','addr'].forEach(k=>{if(!SOF.cust[k]&&c[k])SOF.cust[k]=c[k];});
   document.getElementById('soPh').value=SOF.cust.phone||'';document.getElementById('soCity').value=SOF.cust.city||'';
-  document.getElementById('soAddr').value=SOF.cust.addr||'';document.getElementById('soGst').value=SOF.cust.gstin||'';}
+  document.getElementById('soAddr').value=SOF.cust.addr||'';}
+function soSnapCust(){if(!SOF)return;const c=custFind(SOF.cust.name); if(c&&c.name!==SOF.cust.name){SOF.cust.name=c.name;document.getElementById('soCustName').value=c.name;}}
+function soPickCust(n){SOF.cust.name=n;document.getElementById('soCustName').value=n;soFillCust(n);}
 function soItemHTML(it,i){
   const c=soItemCalc(it);
   const head=`<div class="row" style="margin-bottom:8px"><b>Item ${i+1}</b><span class="chip">${it.type==='custom'?'🧩 Custom mattress':'📗 Price list'}</span><div class="spacer"></div>
@@ -3293,6 +3329,7 @@ function soCancelForm(){if(!confirm('Discard this sales order form?'))return; SO
 function commitSO(){
   const s=SOF; const v=x=>String(x==null?'':x).trim();
   s.cust.name=v(s.cust.name); if(!s.cust.name){alert('Enter the customer / dealer name.');return;}
+  { const c=custConfirm(s.cust.name); if(c==null){const e=document.getElementById('soCustName'); if(e)e.focus(); return;} s.cust.name=c; }
   if(!s.items.length){alert('Add at least one mattress.');return;}
   for(const [i,it] of s.items.entries()){
     const n=`Item ${i+1}: `;
@@ -3747,6 +3784,8 @@ function renderDispatch(){
       ${DOCS_OK?`<td>${psInvCell(p)}</td>`:''}
       <td class="num acts"><button class="btn ghost sm" onclick='viewPS(${JSON.stringify(p.id)})'>View</button>
         <button class="btn ghost sm" title="Print customer + office copy" onclick='printPS(${JSON.stringify(p.id)})'>🖨</button>
+        <button class="btn ghost sm" title="Download packing slip PDF" onclick='psPDF(${JSON.stringify(p.id)})'>⬇ Slip</button>
+        ${DOCS_OK?psInvoices(p).map(d=>`<button class="btn ghost sm" title="Download invoice ${escH(d.docNo)}" onclick='downloadDocFile(${JSON.stringify(d.id)})'>⬇ Inv ${escH(d.docNo)}</button>`).join(''):''}
         ${canDocs()&&DOCS_OK?`<button class="btn ghost sm" title="Upload the Tally invoice made from this slip" onclick='uploadDocModal("invoice",${JSON.stringify(p.id)})'>＋ Invoice</button>`:''}
         ${isSales()?'':`<button class="btn ghost sm" onclick='psModal(${JSON.stringify(p.id)})'>Edit</button> ${delBtn('ps',p)}`}</td></tr>`).join('')+`</tbody></table>`
     :`<p class="muted small" style="padding:14px">No packing slips ${fi||f?'match':'yet — create one from Workorder → Production → 📦 Pack'}.</p>`)
@@ -3768,7 +3807,7 @@ function dispatchModal(id){
   openModal(`<div class="row"><b style="font-size:16px">${id?'Edit dispatch '+escH(d.no):'New dispatch'}</b><div class="spacer"></div><button class="btn ghost sm" onclick="closeModal()">Cancel</button></div>
     <div class="grid g3" style="margin-top:12px">
       <div><label class="f">Dispatch date</label><input id="dpDate" type="date" value="${d.date}"></div>
-      <div><label class="f">Customer</label><input id="dpCust" value="${escH(d.cust)}" list="dlCust2" autocomplete="off" oninput="renderDpPick()"><datalist id="dlCust2">${uniq(DB.orders.map(o=>o.cust)).map(c=>`<option value="${escH(c)}">`).join('')}</datalist></div>
+      <div><label class="f">Customer</label><input id="dpCust" value="${escH(d.cust)}" list="dlCust2" autocomplete="off" oninput="renderDpPick()"><datalist id="dlCust2">${customerNames().map(c=>`<option value="${escH(c)}">`).join('')}</datalist></div>
       <div><label class="f">City</label><input id="dpCity" value="${escH(d.city)}"></div>
       <div><label class="f">Tally invoice no</label><input id="dpInv" value="${escH(d.invoiceNo)}"></div>
       <div><label class="f">Invoice date (warranty starts)</label><input id="dpInvD" type="date" value="${d.invoiceDate||''}"></div>
@@ -3985,7 +4024,7 @@ function psModal(id,woId){
   openModal(`<div class="row"><b style="font-size:16px">${p?'Edit packing slip '+escH(p.no):'New packing slip'}</b><div class="spacer"></div><button class="btn ghost sm" onclick="closeModal()">Cancel</button></div>
     <div class="grid g3" style="margin-top:12px">
       <div><label class="f">Date</label><input id="psDate" type="date" value="${d.date}"></div>
-      <div><label class="f">Customer</label><input id="psCust" value="${escH(d.cust||'')}" list="dlPsCust" autocomplete="off"><datalist id="dlPsCust">${uniq(DB.orders.map(o=>o.cust)).map(c=>`<option value="${escH(c)}">`).join('')}</datalist></div>
+      <div><label class="f">Customer</label><input id="psCust" value="${escH(d.cust||'')}" list="dlPsCust" autocomplete="off"><datalist id="dlPsCust">${customerNames().map(c=>`<option value="${escH(c)}">`).join('')}</datalist></div>
       <div><label class="f">City</label><input id="psCity" value="${escH(d.city||'')}"></div>
       <div style="grid-column:1/3"><label class="f">Delivery address</label><input id="psAddr" value="${escH(d.address||'')}" placeholder="door no, street, area, city, PIN"></div>
       <div><label class="f">Contact phone</label><input id="psPhone" value="${escH(d.phone||'')}"></div>
@@ -4032,6 +4071,7 @@ function commitPS(id){
   const lines=PSL.filter(l=>+l.qty>0);
   if(!lines.length)return err('Add at least one work order with a quantity.');
   if(!val('psCust'))return err('Customer is required.');
+  { const c=custConfirm(val('psCust')); if(c==null)return; document.getElementById('psCust').value=c; }
   const over=lines.map(l=>{const o=DB.orders.find(x=>x.id===l.woId);return {o,l,rem:woRemaining(o,id)};}).filter(x=>x.l.qty>x.rem);
   if(over.length&&!confirm('More than the work order quantity:\n'+over.map(x=>`${x.o.num}: packing ${x.l.qty}, only ${x.rem} left`).join('\n')+'\n\nSave anyway?'))return;
   const p=id?psById(id):{id:uid(),kind:'ps',no:seqRef('PS-',DB.psSeq++),by:CURRENT_USER.name,at:nowISO(),createdAt:nowISO()};
@@ -4066,6 +4106,35 @@ function psSlipHTML(p,copy){
     <div style="display:flex;justify-content:space-between;padding:34px 14px 14px;font-size:12px"><span>Packed by: ${escH(p.by||'')}</span><span>Driver signature</span><span>Received in good condition</span></div>
   </div>`;
 }
+
+/* ---- downloads: packing slip as PDF, invoice PDF file ---- */
+function psPDF(id){const p=psById(id); if(!p)return; const doc=jpdf(); if(!doc)return;
+  const W=doc.internal.pageSize.getWidth(), M=36, cl=x=>String(x==null?'':x).replace(/[—–]/g,'-').replace(/×/g,'x').replace(/[^\x20-\x7E\n]/g,'');
+  doc.setFont('helvetica','bold');doc.setFontSize(16);doc.text('PACKING SLIP',M,46);
+  doc.setFont('helvetica','normal');doc.setFontSize(9);doc.text(cl(companyName()),M,60);
+  doc.setFont('helvetica','bold');doc.setFontSize(13);doc.text(cl(p.no),W-M,46,{align:'right'});
+  doc.setFont('helvetica','normal');doc.setFontSize(9);doc.text('Date '+dmy(p.date),W-M,60,{align:'right'});
+  doc.setDrawColor(200);doc.line(M,70,W-M,70);
+  const meta=[['Customer',[p.cust,[p.address,p.city].filter(Boolean).join(', '),p.phone?'Ph '+p.phone:''].filter(Boolean).join('\n')],['Agent',p.agent||'-'],
+    ['Vehicle',p.vehicle||'-'],['Driver',p.driver||'-'],['Transporter',p.transporter||'-'],['LR / Docket',p.lr||'-'],['Total pieces',String(psQty(p))]];
+  doc.autoTable({startY:80,margin:{left:M,right:M},theme:'plain',styles:{fontSize:9,cellPadding:3},body:meta.map(([a,b])=>[a,cl(b)]),columnStyles:{0:{fontStyle:'bold',cellWidth:90}}});
+  doc.autoTable({startY:doc.lastAutoTable.finalY+8,margin:{left:M,right:M},theme:'grid',styles:{fontSize:9,cellPadding:4},headStyles:{fillColor:[30,64,124]},
+    head:[['#','WO #','Product','Size (L x B x H in)','Qty']],
+    body:p.lines.map((l,i)=>{const w=woById(l.woId)||{}, g=k=>l[k]!=null?l[k]:(w[k]!=null?w[k]:'-');return [i+1,cl(g('woNum')!=='-'?g('woNum'):w.num||'-'),cl(`${g('brand')} ${g('model')}`),`${g('L')} x ${g('W')} x ${g('H')}`,l.qty];}).concat([['','','Total','',psQty(p)]]),
+    columnStyles:{4:{halign:'right',cellWidth:40},3:{halign:'center'}},didParseCell:d=>{if(d.section==='body'&&d.row.index===p.lines.length)d.cell.styles.fontStyle='bold';}});
+  let y=doc.lastAutoTable.finalY+14;
+  if(p.remarks){doc.setFontSize(9);const r=doc.splitTextToSize(cl('Remarks: '+p.remarks),W-2*M);doc.text(r,M,y);y+=r.length*11+6;}
+  y+=30;doc.setFontSize(9);doc.text('Packed by: '+cl(p.by||''),M,y);doc.text('Driver signature',W/2,y,{align:'center'});doc.text('Received in good condition',W-M,y,{align:'right'});
+  doc.save(`${p.no}_${cl(p.cust).replace(/[^A-Za-z0-9]+/g,'_')}.pdf`); toast(`Packing slip ${p.no} downloaded`);
+}
+async function downloadDocFile(id){
+  const d=(DB.woDocs||[]).find(x=>x.id===id); if(!d)return;
+  const name=`${(d.kind==='invoice'?'Invoice_':'Doc_')+String(d.docNo||d.woNum||'file').replace(/[^A-Za-z0-9-]+/g,'_')}.pdf`;
+  const r=await sb.storage.from(DOC_BUCKET).createSignedUrl(d.path,600,{download:name});
+  if(r.error){alert('Could not download file: '+r.error.message);return;}
+  const a=document.createElement('a'); a.href=r.data.signedUrl; a.download=name; a.target='_blank'; document.body.appendChild(a); a.click(); a.remove();
+  toast(`Downloading ${d.kind==='invoice'?'invoice':'file'} ${d.docNo||''}`);
+}
 function printPS(id){const p=psById(id); if(!p)return;
   document.getElementById('printArea').innerHTML=`<style>@page{size:A4;margin:12mm}</style>${psSlipHTML(p,'Customer copy')}${psSlipHTML(p,'Office copy — for invoicing')}`;
   setTimeout(()=>window.print(),50);}
@@ -4073,14 +4142,16 @@ function viewPS(id){const p=psById(id); if(!p)return;
   const inv=psInvoices(p);
   openModal(`<div class="row"><b style="font-size:16px">Packing slip ${escH(p.no)}</b><div class="spacer"></div>
       <button class="btn ghost sm" onclick='printPS(${JSON.stringify(id)})'>🖨 Print</button>
+      <button class="btn ghost sm" onclick='psPDF(${JSON.stringify(id)})'>⬇ PDF</button>
       ${isSales()?'':`<button class="btn ghost sm" onclick='closeModal();psModal(${JSON.stringify(id)})'>Edit</button>`}
       <button class="btn ghost sm" onclick="closeModal()">Close</button></div>
     <div style="margin-top:12px">${psSlipHTML(p,'')}</div>
     ${DOCS_OK?`<div class="divider"></div><div class="row"><b>Invoices</b><span class="tag">${inv.length}</span><div class="spacer"></div>
       ${canDocs()?`<button class="btn ghost sm" onclick='uploadDocModal("invoice",${JSON.stringify(id)})'>＋ Upload invoice</button>`:''}</div>
       ${inv.length?`<table class="oneline" style="margin-top:6px"><tbody>${inv.map(d=>`<tr><td><b>${escH(d.docNo)}</b></td><td>${escH(d.docDate||'')}</td>
-        <td>${d.check?`<span style="cursor:pointer" onclick='showCheck(${JSON.stringify(d.id)})'>${verdictPill(d)}</span>`:verdictPill(d)}</td>
-        <td class="num"><button class="btn ghost sm" onclick='openDocFile(${JSON.stringify(d.id)})'>📄</button>
+        ${isSales()?'':`<td>${d.check?`<span style="cursor:pointer" onclick='showCheck(${JSON.stringify(d.id)})'>${verdictPill(d)}</span>`:verdictPill(d)}</td>`}
+        <td class="num"><button class="btn ghost sm" title="Open" onclick='openDocFile(${JSON.stringify(d.id)})'>📄 View</button>
+        <button class="btn ghost sm" title="Download" onclick='downloadDocFile(${JSON.stringify(d.id)})'>⬇ Download</button>
         ${canDocs()?`<button class="btn sm" title="Check with Claude" onclick='closeModal();runCheck(${JSON.stringify(d.id)})'>🤖</button>`:''}</td></tr>`).join('')}</tbody></table>`
       :`<div class="muted small">No invoice uploaded yet.</div>`}`:''}`);
 }
@@ -4090,7 +4161,7 @@ function psInvCell(p){
   if(!ds.length)return `<span class="pill pend" title="Office has not uploaded the invoice yet">Not invoiced</span>`;
   const bad=ds.filter(isIssue).length, pend=ds.filter(d=>!d.check).length;
   const [c,t]=bad?['crit',`⚠ ${ds.length}`]:pend?['pend',`${ds.length} · not checked`]:['ok',`✓ ${ds.length}`];
-  if(isSales())return `<span class="pill ${c}">${t}</span>`;
+  if(isSales())return `<span class="pill ok">Invoiced · ${ds.map(d=>escH(d.docNo)).join(', ')}</span>`;
   return `<span class="pill ${c}" style="cursor:pointer" onclick='openDocTab("invoice",${JSON.stringify(p.no)})'>${t}</span>`;
 }
 function slipsModal(woId){const o=DB.orders.find(x=>x.id===woId); const ps=slipsOf(woId);
