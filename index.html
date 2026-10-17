@@ -541,7 +541,9 @@
 
   <!-- SALES ORDERS -->
   <section class="view" id="view-sales">
-    <div class="row"><h2 class="section">Sales Orders</h2><div class="spacer"></div><div id="soKpi" class="row" style="gap:6px"></div></div>
+    <div class="row"><h2 class="section">Sales Orders</h2><div class="spacer"></div><div id="soKpi" class="row" style="gap:6px"></div>
+      <button class="btn g" id="soNewBtn" onclick="newSO()">＋ New sales order</button></div>
+    <div class="banner info" id="soNoCreate" style="display:none"></div>
     <p class="lead">Sales raise the order → admin approves → it goes to Workorder ▸ Pending orders → status follows the work order, packing slip and invoice.</p>
     <nav class="tabs" style="margin:0 0 14px 0" id="salesTabs">
       <button data-s="list" class="active" onclick="showSales('list')">📋 Sales orders</button>
@@ -879,7 +881,11 @@ function startPolling(){ setInterval(async()=>{
   try{ const empty=await cloudLoad(); await loadErp(); await loadSales(); await loadDocs(); if(!empty){ initSnap(); refreshView(); } }catch(e){}
 }, 15000); }
 function refreshView(){
-  if(!CURRENT_USER)return; const v=CURRENT_VIEW;
+  if(!CURRENT_USER)return;
+  const fresh=DB.users.find(u=>u.id===CURRENT_USER.id);
+  if(!fresh){logout();return;}
+  if(fresh.role!==CURRENT_USER.role){CURRENT_USER=fresh;applyRole();toast('Your access was changed by the admin');return;}
+  CURRENT_USER=fresh; const v=CURRENT_VIEW;
   if(v==='dash')renderDash(); else if(v==='wo')renderWO(); else if(v==='admin')renderAdmin();
   else if(v==='cutting')renderCutTab(); else if(v==='quilting')renderQuiltTab();
   else if(v==='others')renderOthers();
@@ -946,7 +952,7 @@ function fmt2(n){return Number(n||0).toFixed(2)}
 /* ============================ NAVIGATION ============================ */
 function go(v){
   if(CURRENT_USER && CURRENT_USER.role!=='admin' && v==='admin')v='wo';
-  if(CURRENT_USER && CURRENT_USER.role==='sales')v='sales';
+  if(CURRENT_USER && CURRENT_USER.role==='sales' && !SALES_TABS.includes(v))v='sales';
   CURRENT_VIEW=v;
   document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('active',b.dataset.v===v));
   document.querySelectorAll('.view').forEach(s=>s.classList.remove('active'));
@@ -969,7 +975,7 @@ function doLogin(){
   document.getElementById('login').style.display='none';
   applyRole(); document.getElementById('loginPin').value='';document.getElementById('loginErr').textContent='';
 }
-function logout(){CURRENT_USER=null; try{localStorage.removeItem('wo_session');}catch(e){}
+function logout(){CURRENT_USER=null; try{closeModal();}catch(e){} try{localStorage.removeItem('wo_session');}catch(e){}
   document.getElementById('login').style.display='flex';
   document.getElementById('loginUser').value='';document.getElementById('loginUser').focus();}
 function restoreSession(){
@@ -978,11 +984,12 @@ function restoreSession(){
   if(user){CURRENT_USER=user;document.getElementById('login').style.display='none';applyRole();return true;}
   return false;
 }
+const SALES_TABS=['sales','dispatch'];
 function applyRole(){
   const admin=CURRENT_USER.role==='admin';
   const sales=CURRENT_USER.role==='sales';
   document.getElementById('userChip').textContent=CURRENT_USER.name+(admin?' · Admin':CURRENT_USER.role==='office'?' · Office':sales?' · Sales':' · Operator');
-  document.querySelectorAll('#tabs button').forEach(b=>b.style.display=(sales?b.dataset.v==='sales':(b.dataset.role!=='admin'||admin))?'':'none');
+  document.querySelectorAll('#tabs button').forEach(b=>b.style.display=(sales?SALES_TABS.includes(b.dataset.v):(b.dataset.role!=='admin'||admin))?'':'none');
   go(sales?'sales':'dash');
 }
 function renderAdmin(){ showAdmin(ADMIN_SUB); }
@@ -1713,7 +1720,7 @@ function woSheetHTML(o){
     <div style="padding:12px 14px" class="tag">Delivery: ${o.delivery||'-'}</div>
   </div>`;
 }
-function viewWO(id){const o=DB.orders.find(x=>x.id===id);
+function viewWO(id){if(isSales())return; const o=DB.orders.find(x=>x.id===id);
   openModal(`<div class="row"><b style="font-size:16px">Work Order ${o.num}</b><div class="spacer"></div>
     <button class="btn ghost sm" onclick='docPDF("wo",${JSON.stringify(id)})'>⬇ PDF</button>
     <button class="btn ghost sm" onclick="closeModal()">Close</button></div>
@@ -3061,6 +3068,9 @@ function showSales(sub){
   document.querySelectorAll('.salesSub').forEach(d=>d.style.display='none');
   document.getElementById('salesSub-'+sub).style.display='block';
   const nb=document.querySelector('#salesTabs button[data-s="new"]'); if(nb)nb.style.display=canSell()?'':'none';
+  const hb=document.getElementById('soNewBtn'); if(hb)hb.style.display=canSell()&&sub!=='new'?'':'none';
+  const nc=document.getElementById('soNoCreate'); if(nc){nc.style.display=canSell()?'none':'block';
+    nc.innerHTML=`You are logged in as <b>${escH(CURRENT_USER.role)}</b> — you can view sales orders and their status. Only <b>Sales</b>, Office and Admin users can create them (Admin Control → Users → Role).`;}
   if(sub==='list')renderSOList(); if(sub==='new')renderSOForm();
 }
 function visibleSOs(){return (DB.salesOrders||[]).filter(s=>!isSales()||s.createdById===CURRENT_USER.id);}
@@ -3108,7 +3118,7 @@ function soSummaryHTML(s){
       <div class="small">${escH(it.type==='custom'?'':(it.sizeName==='Custom'?'Custom size':it.sizeName)+' · '+it.thk+' · ')}${fmt(it.L,2)}×${fmt(it.W,2)}×${fmt(it.H,2)} in${it.priceBasis?` <span class="tag">${escH(it.priceBasis)}</span>`:''}</div>
       ${it.desc?`<div class="small" style="white-space:pre-wrap;color:var(--txt);margin-top:3px">📝 ${escH(it.desc)}</div>`:''}</td>
       <td class="num">${it.qty}</td><td class="num" style="white-space:nowrap">${rs(it.mrp)}</td><td class="num">${+it.discPct?fmt(it.discPct,2)+'%':'-'}</td><td class="num" style="white-space:nowrap">${rs(c.net)}</td>
-      ${g?`<td>${g.wos.length?g.wos.map(o=>`<a href="#" onclick='closeModal();viewWO(${JSON.stringify(o.id)});return false'>${escH(o.num)}</a>`).join(', '):'-'}<br><span class="pill ${g.rank>=5?'ok':g.rank>=2?'low':'pend'}">${SO_STAGES[g.rank]}</span>${g.packed?` <span class="tag">packed ${g.packed}/${it.qty}</span>`:''}</td>`:''}</tr>`;}).join('');
+      ${g?`<td>${g.wos.length?g.wos.map(o=>isSales()?escH(o.num):`<a href="#" onclick='closeModal();viewWO(${JSON.stringify(o.id)});return false'>${escH(o.num)}</a>`).join(', '):'-'}<br><span class="pill ${g.rank>=5?'ok':g.rank>=2?'low':'pend'}">${SO_STAGES[g.rank]}</span>${g.packed?` <span class="tag">packed ${g.packed}/${it.qty}</span>`:''}</td>`:''}</tr>`;}).join('');
   const ex=(s.extras||[]).map(e=>`<tr><td class="wrap">${escH(e.desc)}</td><td class="num">${rs(e.amount)}</td></tr>`).join('');
   return `<div class="grid g2" style="margin-top:10px">
       <div class="kpi"><div class="l">Customer</div><b>${escH(s.cust.name)}</b><div class="small">${escH([s.cust.phone,s.cust.city].filter(Boolean).join(' · '))}</div>
@@ -3721,7 +3731,7 @@ function printLabels(ids){
 /* ============================ DISPATCH ============================ */
 function renderDispatch(){
   if(erpLocked('dispBody'))return;
-  document.getElementById('dpNew').style.display='';
+  document.getElementById('dpNew').style.display=isSales()?'none':'';
   const f=(document.getElementById('dpF').value||'').trim().toLowerCase(), fi=document.getElementById('dpInv').value;
   const from=document.getElementById('dpFrom').value,to=document.getElementById('dpTo').value;
   const all=DB.dispatches.filter(d=>inRange(d.date,from,to)&&(!f||[d.no,d.cust,d.city,d.invoiceNo,d.vehicle,d.lr,(d.woNums||[]).join(' ')].join(' ').toLowerCase().includes(f))).slice().reverse();
@@ -3738,7 +3748,7 @@ function renderDispatch(){
       <td class="num acts"><button class="btn ghost sm" onclick='viewPS(${JSON.stringify(p.id)})'>View</button>
         <button class="btn ghost sm" title="Print customer + office copy" onclick='printPS(${JSON.stringify(p.id)})'>🖨</button>
         ${canDocs()&&DOCS_OK?`<button class="btn ghost sm" title="Upload the Tally invoice made from this slip" onclick='uploadDocModal("invoice",${JSON.stringify(p.id)})'>＋ Invoice</button>`:''}
-        <button class="btn ghost sm" onclick='psModal(${JSON.stringify(p.id)})'>Edit</button> ${delBtn('ps',p)}</td></tr>`).join('')+`</tbody></table>`
+        ${isSales()?'':`<button class="btn ghost sm" onclick='psModal(${JSON.stringify(p.id)})'>Edit</button> ${delBtn('ps',p)}`}</td></tr>`).join('')+`</tbody></table>`
     :`<p class="muted small" style="padding:14px">No packing slips ${fi||f?'match':'yet — create one from Workorder → Production → 📦 Pack'}.</p>`)
   +(old.length?`<div style="padding:10px 12px 0" class="tag"><b>Older dispatches (serial-number based)</b></div><table class="oneline"><thead><tr><th>Dispatch #</th><th>Date</th><th>Customer</th><th>City</th><th>WO #</th>
     <th class="num">Pcs</th><th>Invoice</th><th>Inv. date</th><th>Vehicle</th><th class="num"></th></tr></thead><tbody>`+
@@ -3750,6 +3760,7 @@ function renderDispatch(){
 }
 let DP_SEL=new Set();
 function dispatchModal(id){
+  if(isSales())return;
   if(!ERP_OK)return alert('Run erp_setup.sql in Supabase first.');
   const d=id?DB.dispatches.find(x=>x.id===id):{date:today(),cust:'',city:'',invoiceNo:'',invoiceDate:'',vehicle:'',transporter:'',lr:'',note:'',serialIds:[],
     wYears:DB.settings.warrantyYears||10,rYears:DB.settings.replaceYears||3};
@@ -3966,6 +3977,7 @@ function companyName(){return (DB.settings&&DB.settings.companyName)||'Napcat & 
 
 let PSL=[];
 function psModal(id,woId){
+  if(isSales())return;
   if(!ERP_OK)return alert('Run erp_setup.sql in Supabase first.');
   const p=id?psById(id):null; const o0=woId?DB.orders.find(o=>o.id===woId):null;
   const d=p||{date:today(),cust:o0?o0.cust:'',city:o0?o0.city:'',agent:o0?o0.agent:'',address:'',phone:'',vehicle:'',transporter:'',lr:'',driver:'',remarks:''};
@@ -4015,6 +4027,7 @@ function psAddLine(num){const o=DB.orders.find(x=>String(x.num).toLowerCase()===
   if(!val('psCust')){document.getElementById('psCust').value=o.cust||'';document.getElementById('psCity').value=o.city||'';document.getElementById('psAgent').value=o.agent||'';}
   renderPSLines();}
 function commitPS(id){
+  if(isSales())return;
   const err=t=>{const b=document.getElementById('psErr');b.className='banner err';b.textContent=t;};
   const lines=PSL.filter(l=>+l.qty>0);
   if(!lines.length)return err('Add at least one work order with a quantity.');
@@ -4060,7 +4073,7 @@ function viewPS(id){const p=psById(id); if(!p)return;
   const inv=psInvoices(p);
   openModal(`<div class="row"><b style="font-size:16px">Packing slip ${escH(p.no)}</b><div class="spacer"></div>
       <button class="btn ghost sm" onclick='printPS(${JSON.stringify(id)})'>🖨 Print</button>
-      <button class="btn ghost sm" onclick='closeModal();psModal(${JSON.stringify(id)})'>Edit</button>
+      ${isSales()?'':`<button class="btn ghost sm" onclick='closeModal();psModal(${JSON.stringify(id)})'>Edit</button>`}
       <button class="btn ghost sm" onclick="closeModal()">Close</button></div>
     <div style="margin-top:12px">${psSlipHTML(p,'')}</div>
     ${DOCS_OK?`<div class="divider"></div><div class="row"><b>Invoices</b><span class="tag">${inv.length}</span><div class="spacer"></div>
@@ -4077,6 +4090,7 @@ function psInvCell(p){
   if(!ds.length)return `<span class="pill pend" title="Office has not uploaded the invoice yet">Not invoiced</span>`;
   const bad=ds.filter(isIssue).length, pend=ds.filter(d=>!d.check).length;
   const [c,t]=bad?['crit',`⚠ ${ds.length}`]:pend?['pend',`${ds.length} · not checked`]:['ok',`✓ ${ds.length}`];
+  if(isSales())return `<span class="pill ${c}">${t}</span>`;
   return `<span class="pill ${c}" style="cursor:pointer" onclick='openDocTab("invoice",${JSON.stringify(p.no)})'>${t}</span>`;
 }
 function slipsModal(woId){const o=DB.orders.find(x=>x.id===woId); const ps=slipsOf(woId);
@@ -4085,7 +4099,7 @@ function slipsModal(woId){const o=DB.orders.find(x=>x.id===woId); const ps=slips
     ${ps.map(p=>`<tr><td><b>${escH(p.no)}</b></td><td>${dmy(p.date)}</td><td class="num">${p.lines.filter(l=>l.woId===woId).reduce((s,l)=>s+l.qty,0)}</td><td>${escH(p.vehicle||'-')}</td><td>${psInvCell(p)}</td>
       <td class="num acts"><button class="btn ghost sm" onclick='closeModal();viewPS(${JSON.stringify(p.id)})'>View</button><button class="btn ghost sm" onclick='printPS(${JSON.stringify(p.id)})'>🖨</button></td></tr>`).join('')}</tbody></table>`);
 }
-async function delPS(id){const p=psById(id); if(!p)return;
+async function delPS(id){const p=psById(id); if(!p||isSales())return;
   if(!delAllowed(p,'Packing slip '+p.no))return;
   const inv=psInvoices(p);
   if(!confirm(`Delete packing slip ${p.no} completely?${inv.length?`\n\n• ${inv.length} uploaded invoice PDF(s) will be deleted too`:''}\n\nThis cannot be undone.`))return;
@@ -4219,6 +4233,7 @@ function renderDocTab(kind){
 }
 
 function uploadDocModal(kind,woId){
+  if(!canDocs())return;
   if(!canDocs()){alert('Only admin and office users can upload.');return;}
   if(!DOCS_OK){alert('Document storage is not set up yet in Supabase. See the setup guide.');return;}
   const K=DOC_KINDS[kind], isCut=kind==='tallycut', isInv=kind==='invoice';
