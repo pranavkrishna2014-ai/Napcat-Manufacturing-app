@@ -112,6 +112,13 @@
   .toast.show{opacity:1;transform:none} .toast.err{background:#d92d20} .toast.info{background:#2f6df6}
   @media print{#toastBox{display:none!important}}
   .layer-row{display:grid;grid-template-columns:1.6fr 1fr 1fr auto;gap:8px;margin-bottom:8px;align-items:center}
+  .pbox{border:2px solid var(--line);border-radius:12px;background:var(--panel);margin-bottom:16px;overflow:hidden}
+  .pbox.active{border-color:var(--accent)}
+  .pbox>.ph{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:10px 16px;background:var(--panel2);border-bottom:1px solid var(--line)}
+  .pbox.active>.ph{background:#e8f0fe}
+  .pbox>.pb{padding:14px 16px}
+  .pbox-in{border:1px dashed var(--line);border-radius:10px;padding:12px;margin-top:12px}
+  .pnum{background:var(--accent);color:#fff;border-radius:6px;padding:2px 8px;font-weight:700;font-size:12px}
   .kpi{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:14px}
   .kpi .v{font-size:26px;font-weight:700} .kpi .l{color:var(--muted);font-size:12px}
   .banner{padding:10px 14px;border-radius:8px;font-size:13px;margin-bottom:12px;display:none}
@@ -178,6 +185,7 @@
   </div>
 </header>
 
+<datalist id="dlAllCust"></datalist>
 <!-- LOGIN OVERLAY -->
 <div id="login" style="position:fixed;inset:0;z-index:200;background:linear-gradient(135deg,#eef3fb,#dfe8f6);display:flex;align-items:center;justify-content:center">
   <div class="card" style="max-width:360px;width:100%;text-align:center">
@@ -211,71 +219,73 @@
       <button data-w="pending" onclick="showWO('pending')">📥 Pending orders</button>
     </nav>
     <div class="woSub" id="woSub-pending" style="display:none">
-      <div class="card"><div class="row"><b>Approved sales orders waiting for a work order</b><span class="tag" id="soPendCount"></span></div>
+      <div class="card"><div class="row"><b>Approved sales orders waiting for a work order</b><span class="tag" id="soPendCount"></span><div class="spacer"></div>
+          <input id="cf-pend" list="dlAllCust" placeholder="customer…" style="max-width:190px" autocomplete="off" onfocus="fillAllCust()" oninput="renderPendingSO()">
+          <button class="btn ghost sm sortbtn" id="sort-pend" title="Sort by date" onclick="toggleSort('pend',renderPendingSO)">📅 Newest first ↓</button></div>
         <div class="hint">Click “Create WO” — the work order form opens filled in from the sales order. Check the BOM and save.</div></div>
       <div class="card" style="padding:0;overflow:auto"><div id="soPendBody"></div></div>
     </div>
 
     <!-- Create -->
     <div class="woSub" id="woSub-create">
-      <div class="banner info" id="woSOBanner" style="display:none"></div>
       <div class="card">
-        <div class="grid g3">
+        <div class="row"><b>Order details</b><span class="chip" id="woNumChip">WO #: —</span><span class="chip" id="woDateChip"></span></div>
+        <div class="grid g4" style="margin-top:12px">
+          <div><label class="f">Customer name</label><input id="woCust" list="dlCust" autocomplete="off" placeholder="type 3 letters…" oninput="renderWOSOPanel()" onchange="woCustPicked()"></div>
+          <div><label class="f">City of delivery</label><input id="woCity" list="dlCity" autocomplete="off" placeholder="type 3 letters…"></div>
+          <div><label class="f">Agent name</label><input id="woAgent" list="dlAgent" autocomplete="off" placeholder="type 3 letters…"></div>
+          <div><label class="f">Delivery (days)</label><input id="woDelivery" placeholder="5 DAYS"></div>
+        </div>
+        <datalist id="dlCust"></datalist><datalist id="dlCity"></datalist><datalist id="dlAgent"></datalist>
+        <div id="woSOPanel"></div>
+      </div>
+
+      <div id="woItemsBox"></div>
+      <div class="row" style="margin:-4px 0 24px 0">
+        <button class="btn" onclick="woAddItem()">＋ Add another product</button>
+        <div class="spacer"></div>
+        <button class="btn ghost" onclick="downloadOnePDF('wo')">⬇ Download PDF</button>
+        <button class="btn g" onclick="saveWO()">Save work order</button>
+      </div>
+
+      <div id="woEditorHome" style="display:none">
+      <div id="woEditor">
+        <div class="grid g4">
           <div><label class="f">Brand</label>
             <select id="woBrand" onchange="onBrandChange()"><option value="">— select brand —</option></select></div>
           <div><label class="f">Model</label>
             <select id="woModel" onchange="onModelChange()"><option value="">— select model —</option></select></div>
-          <div><label class="f">&nbsp;</label>
-            <div class="row"><span class="chip" id="woNumChip">WO #: —</span><span class="chip" id="woDateChip"></span></div></div>
+          <div style="grid-column:span 2"><label class="f">&nbsp;</label>
+            <label class="row" style="gap:6px;font-size:12px;color:var(--muted);font-weight:600;cursor:pointer">
+              <input type="checkbox" id="woCustom" style="width:auto" onchange="toggleCustom()"> 🧩 Custom product — build a one-off BOM (any ingredients)</label></div>
         </div>
-        <div class="row" style="margin-top:10px">
-          <label class="row" style="gap:6px;font-size:12px;color:var(--muted);font-weight:600;cursor:pointer">
-            <input type="checkbox" id="woCustom" style="width:auto" onchange="toggleCustom()"> 🧩 Custom order — build a one-off BOM (any ingredients)
-          </label>
+        <div id="woCustomBox" class="pbox-in" style="display:none">
+          <div class="row"><b>Custom BOM</b><span class="tag">for products that don't use a fixed recipe · works for both brands</span></div>
+          <div class="grid g3" style="margin-top:10px">
+            <div><label class="f">Brand</label><select id="woCustBrand" onchange="rebuildCustomProd()">
+              <option>Napcat</option><option>Orthonap</option></select></div>
+            <div><label class="f">Custom name / ref</label><input id="woCustName" placeholder="e.g. Custom — Mr. Rao" oninput="rebuildCustomProd()"></div>
+            <div><label class="f">Border fabric width (in)</label><input id="woCustBW" type="number" value="82" oninput="rebuildCustomProd()"></div>
+          </div>
+          <div class="divider"></div>
+          <div class="row"><b>Layers</b><span class="tag">pick material + rule per layer</span><div class="spacer"></div>
+            <button class="btn sm" onclick="addWOCustLayer()">+ Add layer</button></div>
+          <div id="woCustLayerBox" style="margin-top:10px"></div>
         </div>
-      </div>
-
-      <!-- CUSTOM BOM BUILDER -->
-      <div class="card" id="woCustomBox" style="display:none">
-        <div class="row"><b>Custom BOM</b><span class="tag">for orders that don't use a fixed recipe · works for both brands</span></div>
-        <div class="grid g3" style="margin-top:10px">
-          <div><label class="f">Brand</label><select id="woCustBrand">
-            <option>Napcat</option><option>Orthonap</option></select></div>
-          <div><label class="f">Custom name / ref</label><input id="woCustName" placeholder="e.g. Custom — Mr. Rao"></div>
-          <div><label class="f">Border fabric width (in)</label><input id="woCustBW" type="number" value="82" oninput="rebuildCustomProd()"></div>
-        </div>
-        <div class="divider"></div>
-        <div class="row"><b>Layers</b><span class="tag">pick material + rule per layer</span><div class="spacer"></div>
-          <button class="btn sm" onclick="addWOCustLayer()">+ Add layer</button></div>
-        <div id="woCustLayerBox" style="margin-top:10px"></div>
-      </div>
-
-      <div class="banner" id="woErr"></div>
-      <div class="card">
-        <b>Order details</b>
-        <div class="grid g3" style="margin-top:12px">
-          <div><label class="f">Customer name</label><input id="woCust" list="dlCust" autocomplete="off" placeholder="type 3 letters…"></div>
-          <div><label class="f">City of delivery</label><input id="woCity" list="dlCity" autocomplete="off" placeholder="type 3 letters…"></div>
-          <div><label class="f">Agent name</label><input id="woAgent" list="dlAgent" autocomplete="off" placeholder="type 3 letters…"></div>
+        <div class="grid g4" style="margin-top:12px">
           <div><label class="f">Length (in)</label><input id="woL" type="number" oninput="renderCalc()"></div>
           <div><label class="f">Breadth (in)</label><input id="woW" type="number" oninput="renderCalc()"></div>
           <div><label class="f">Height (in)</label><input id="woH" type="number" oninput="renderCalc()"></div>
           <div><label class="f">Quantity</label><input id="woQ" type="number" value="1" oninput="renderCalc()"></div>
-          <div><label class="f">Delivery (days)</label><input id="woDelivery" placeholder="5 DAYS"></div>
         </div>
-        <datalist id="dlCust"></datalist><datalist id="dlCity"></datalist><datalist id="dlAgent"></datalist>
-      </div>
-      <div class="card">
-        <div class="row"><b>Material breakup</b>
+        <div class="banner" id="woErr" style="margin-top:10px"></div>
+        <div class="row" style="margin-top:10px"><b>Material breakup</b>
           <label class="row" style="gap:6px;margin-left:14px;font-size:12px;color:var(--muted);font-weight:600;cursor:pointer">
             <input type="checkbox" id="woAllowSub" style="width:auto" onchange="renderCalc()"> 🔧 Allow ingredient substitution
-          </label>
-          <div class="spacer"></div>
-          <button class="btn ghost sm" onclick="downloadOnePDF('wo')">⬇ Download PDF</button>
-          <button class="btn g sm" onclick="saveWO()">Save order</button>
-        </div>
-        <div class="hint">Turn on substitution to let Shiva swap the foam/fabric used when a different material is needed for an order. Any change is logged in the admin Substitutions report.</div>
+          </label></div>
+        <div class="hint">Turn on substitution to let Shiva swap the foam/fabric used when a different material is needed. Any change is logged in the admin Substitutions report.</div>
         <div id="calcOut" style="margin-top:12px"><p class="muted small">Select a brand and model to begin.</p></div>
+      </div>
       </div>
     </div>
 
@@ -290,8 +300,9 @@
         <div class="row" style="margin-top:10px">
           <label class="tag">From</label><input type="date" id="woFrom" style="max-width:150px" onchange="renderWOAll()">
           <label class="tag">To</label><input type="date" id="woTo" style="max-width:150px" onchange="renderWOAll()">
-          <label class="tag">Client</label><input id="woFCust" list="dlCust" placeholder="customer name" style="max-width:180px" oninput="renderWOAll()">
+          <label class="tag">Client</label><input id="woFCust" list="dlAllCust" onfocus="fillAllCust()" placeholder="customer name" style="max-width:180px" oninput="renderWOAll()">
           <label class="tag">Model</label><input id="woFModel" list="dlModelAll" placeholder="mattress model" style="max-width:180px" oninput="renderWOAll()">
+          <button class="btn ghost sm sortbtn" id="sort-wo" title="Sort by date" onclick="toggleSort('wo',renderWOAll)">📅 Newest first ↓</button>
           <button class="btn ghost sm" onclick="clearWOFilter()">Clear</button>
         </div>
         <datalist id="dlModelAll"></datalist>
@@ -305,9 +316,13 @@
           <button class="btn ghost sm" onclick="issueModal()">− Issue material</button></div>
         <div class="hint">Issue materials from stores, then <b>📦 Pack</b> what is leaving: it creates a packing slip (customer copy + office copy). The office makes the Tally invoice from the slip, uploads it, and Claude checks invoice vs packing slip.</div>
         <div class="row" style="margin-top:10px">
-          <input id="prF" placeholder="search WO #, customer or model" style="max-width:300px" oninput="renderProduction()">
+          <input id="prF" placeholder="search WO #, customer or model" style="max-width:260px" oninput="renderProduction()">
+          <input id="cf-prod" list="dlAllCust" placeholder="customer…" style="max-width:190px" autocomplete="off" onfocus="fillAllCust()" oninput="renderProduction()">
+          <label class="tag">From</label><input type="date" id="prFrom" style="max-width:150px" onchange="renderProduction()">
+          <label class="tag">To</label><input type="date" id="prTo" style="max-width:150px" onchange="renderProduction()">
           <select id="prS" style="max-width:200px" onchange="renderProduction()"><option value="open">In progress / not started</option>
             <option value="ready">Part packed</option><option value="done">Fully packed</option><option value="">All</option></select>
+          <button class="btn ghost sm sortbtn" id="sort-prod" title="Sort by date" onclick="toggleSort('prod',renderProduction)">📅 Newest first ↓</button>
         </div>
       </div>
       <div class="card" style="padding:0;overflow:auto"><div id="prodBody"></div></div>
@@ -327,7 +342,9 @@
           <select id="docS-invoice" style="max-width:210px" onchange="renderDocTab('invoice')">
             <option value="">All</option><option value="pending">Not checked yet</option>
             <option value="issue">Differences / unclear (to review)</option><option value="match">OK (matches + accepted)</option><option value="accepted">Accepted by admin</option></select>
-          <button class="btn ghost sm" onclick="document.getElementById('docF-invoice').value='';document.getElementById('docS-invoice').value='';renderDocTab('invoice')">Clear</button>
+          <input id="cf-invoice" list="dlAllCust" placeholder="customer…" style="max-width:190px" autocomplete="off" onfocus="fillAllCust()" oninput="renderDocTab('invoice')">
+          <button class="btn ghost sm sortbtn" id="sort-invoice" title="Sort by date" onclick="toggleSort('invoice',()=>renderDocTab('invoice'))">📅 Newest first ↓</button>
+          <button class="btn ghost sm" onclick="document.getElementById('docF-invoice').value='';document.getElementById('docS-invoice').value='';const c=document.getElementById('cf-invoice');if(c)c.value='';renderDocTab('invoice')">Clear</button>
         </div>
         <div class="banner info" id="docBulk-invoice" style="display:none;margin-top:10px"></div>
         <div class="banner err" id="docSetup-invoice" style="display:none">Online document storage is not set up yet. Run the SQL from the setup guide in Supabase once, then reload.</div>
@@ -349,7 +366,9 @@
           <select id="docS-tally" style="max-width:210px" onchange="renderDocTab('tally')">
             <option value="">All</option><option value="pending">Not checked yet</option>
             <option value="issue">Differences / unclear (to review)</option><option value="match">OK (matches + accepted)</option><option value="accepted">Accepted by admin</option></select>
-          <button class="btn ghost sm" onclick="document.getElementById('docF-tally').value='';document.getElementById('docS-tally').value='';renderDocTab('tally')">Clear</button>
+          <input id="cf-tally" list="dlAllCust" placeholder="customer…" style="max-width:190px" autocomplete="off" onfocus="fillAllCust()" oninput="renderDocTab('tally')">
+          <button class="btn ghost sm sortbtn" id="sort-tally" title="Sort by date" onclick="toggleSort('tally',()=>renderDocTab('tally'))">📅 Newest first ↓</button>
+          <button class="btn ghost sm" onclick="document.getElementById('docF-tally').value='';document.getElementById('docS-tally').value='';const c=document.getElementById('cf-tally');if(c)c.value='';renderDocTab('tally')">Clear</button>
         </div>
         <div class="banner info" id="docBulk-tally" style="display:none;margin-top:10px"></div>
         <div class="banner err" id="docSetup-tally" style="display:none">Online document storage is not set up yet. Run the SQL from the setup guide in Supabase once, then reload.</div>
@@ -417,6 +436,10 @@
           <div><label class="f">Label printing</label><select id="setLbl"><option value="roll">Label printer — 100 × 50 mm roll</option><option value="a4">A4 sheet — 10 labels per page</option></select></div>
           <div style="grid-column:1/4"><button class="btn g" onclick="saveSettings()">Save settings</button></div>
         </div>
+        <b>Old entries (before 10-Oct-2026)</b>
+        <div class="card"><div class="row"><span class="tag" id="legacyInfo"></span><div class="spacer"></div>
+          <button class="btn ghost sm" onclick="legacyCloseOut(true)">Run close-out again</button></div>
+          <div class="hint">Work orders dated before 10-Oct-2026 get an automatic packing slip (OLD-WO#) for any quantity not yet packed, and are marked closed for Invoice and Tally WO. Nothing after that date is touched.</div></div>
       </div>
 
       <div class="adminSub" id="adminSub-materials">
@@ -479,8 +502,11 @@
     <div class="cutSub" id="cutSub-all" style="display:none">
       <div class="card"><div class="row">
         <b>All Cutting Orders</b><span class="tag" id="cutCount"></span><div class="spacer"></div>
-        <label class="tag">From</label><input type="date" id="cutFrom" style="max-width:150px">
-        <label class="tag">To</label><input type="date" id="cutTo" style="max-width:150px">
+        <input id="cutQ" placeholder="search cut #, grade, supplier, invoice…" style="max-width:240px" oninput="renderCutAll()">
+        <select id="cutSt" style="max-width:150px" onchange="renderCutAll()"><option value="">All statuses</option><option value="open">Issued (open)</option><option value="completed">Completed</option></select>
+        <label class="tag">From</label><input type="date" id="cutFrom" style="max-width:150px" onchange="renderCutAll()">
+        <label class="tag">To</label><input type="date" id="cutTo" style="max-width:150px" onchange="renderCutAll()">
+        <button class="btn ghost sm sortbtn" id="sort-cut" title="Sort by date" onclick="toggleSort('cut',renderCutAll)">📅 Newest first ↓</button>
         <button class="btn ghost sm" onclick="renderCutAll()">Filter</button>
         <button class="btn ghost sm" onclick="exportExcel('cut')">⬇ Excel (all)</button>
         <button class="btn sm" onclick="bulkPDF('cut')">⬇ PDF zip (range)</button>
@@ -502,7 +528,8 @@
           <select id="docS-tallycut" style="max-width:210px" onchange="renderDocTab('tallycut')">
             <option value="">All</option><option value="pending">Not checked yet</option>
             <option value="issue">Differences / unclear (to review)</option><option value="match">OK (matches + accepted)</option><option value="accepted">Accepted by admin</option></select>
-          <button class="btn ghost sm" onclick="document.getElementById('docF-tallycut').value='';document.getElementById('docS-tallycut').value='';renderDocTab('tallycut')">Clear</button>
+                    <button class="btn ghost sm sortbtn" id="sort-tallycut" title="Sort by date" onclick="toggleSort('tallycut',()=>renderDocTab('tallycut'))">📅 Newest first ↓</button>
+          <button class="btn ghost sm" onclick="document.getElementById('docF-tallycut').value='';document.getElementById('docS-tallycut').value='';const c=document.getElementById('cf-tallycut');if(c)c.value='';renderDocTab('tallycut')">Clear</button>
         </div>
         <div class="banner info" id="docBulk-tallycut" style="display:none;margin-top:10px"></div>
         <div class="banner err" id="docSetup-tallycut" style="display:none">Online document storage is not set up yet. Run the SQL from the setup guide in Supabase once, then reload.</div>
@@ -528,8 +555,11 @@
     <div class="quiltSub" id="quiltSub-all" style="display:none">
       <div class="card"><div class="row">
         <b>All Quilting Jobs</b><span class="tag" id="quiltCount"></span><div class="spacer"></div>
-        <label class="tag">From</label><input type="date" id="quiltFrom" style="max-width:150px">
-        <label class="tag">To</label><input type="date" id="quiltTo" style="max-width:150px">
+        <input id="quiltQ" placeholder="search job #, quilter, fabric…" style="max-width:220px" oninput="renderQuiltAll()">
+        <select id="quiltSt" style="max-width:150px" onchange="renderQuiltAll()"><option value="">All statuses</option><option value="open">Issued / partial</option><option value="received">Closed</option></select>
+        <label class="tag">From</label><input type="date" id="quiltFrom" style="max-width:150px" onchange="renderQuiltAll()">
+        <label class="tag">To</label><input type="date" id="quiltTo" style="max-width:150px" onchange="renderQuiltAll()">
+        <button class="btn ghost sm sortbtn" id="sort-quilt" title="Sort by date" onclick="toggleSort('quilt',renderQuiltAll)">📅 Newest first ↓</button>
         <button class="btn ghost sm" onclick="renderQuiltAll()">Filter</button>
         <button class="btn ghost sm" onclick="exportExcel('quilt')">⬇ Excel (all)</button>
         <button class="btn sm" onclick="bulkPDF('quilt')">⬇ PDF zip (range)</button>
@@ -551,10 +581,14 @@
     </nav>
     <div class="salesSub" id="salesSub-list">
       <div class="card"><div class="row">
-        <input id="soF" placeholder="search SO #, customer, model…" style="max-width:260px" oninput="renderSOList()">
+        <input id="soF" placeholder="search SO #, model, sales person…" style="max-width:230px" oninput="renderSOList()">
+        <input id="cf-so" list="dlAllCust" placeholder="customer…" style="max-width:190px" autocomplete="off" onfocus="fillAllCust()" oninput="renderSOList()">
+        <label class="tag">From</label><input type="date" id="soFrom" style="max-width:150px" onchange="renderSOList()">
+        <label class="tag">To</label><input type="date" id="soTo" style="max-width:150px" onchange="renderSOList()">
         <select id="soS" style="max-width:200px" onchange="renderSOList()"><option value="">All statuses</option>
           <option value="pending">Pending approval</option><option value="open">Approved · in progress</option>
-          <option value="done">Packed / invoiced</option><option value="rejected">Rejected</option></select></div></div>
+          <option value="done">Packed / invoiced</option><option value="rejected">Rejected</option></select>
+        <button class="btn ghost sm sortbtn" id="sort-so" title="Sort by date" onclick="toggleSort('so',renderSOList)">📅 Newest first ↓</button></div></div>
       <div class="card" style="padding:0;overflow:auto"><div id="soBody"></div></div>
     </div>
     <div class="salesSub" id="salesSub-new" style="display:none"><div id="soForm"></div></div>
@@ -598,10 +632,12 @@
       <button class="btn g" id="dpNew" onclick="psModal()">＋ New packing slip</button></div>
     <p class="lead" id="dpReady"></p>
     <div class="card"><div class="row">
-      <input id="dpF" placeholder="search slip #, customer, vehicle, LR, WO #" style="max-width:340px" oninput="renderDispatch()">
+      <input id="dpF" placeholder="search slip #, vehicle, LR, WO #" style="max-width:260px" oninput="renderDispatch()">
+      <input id="cf-disp" list="dlAllCust" placeholder="customer…" style="max-width:190px" autocomplete="off" onfocus="fillAllCust()" oninput="renderDispatch()">
       <select id="dpInv" style="max-width:190px" onchange="renderDispatch()"><option value="">All slips</option><option value="none">Not invoiced yet</option><option value="issue">Invoice differences</option></select>
       <label class="tag">From</label><input type="date" id="dpFrom" style="max-width:150px" onchange="renderDispatch()">
-      <label class="tag">To</label><input type="date" id="dpTo" style="max-width:150px" onchange="renderDispatch()"></div></div>
+      <label class="tag">To</label><input type="date" id="dpTo" style="max-width:150px" onchange="renderDispatch()">
+      <button class="btn ghost sm sortbtn" id="sort-disp" title="Sort by date" onclick="toggleSort('disp',renderDispatch)">📅 Newest first ↓</button></div></div>
     <div class="card" style="padding:0;overflow:auto"><div id="dispBody"></div></div>
   </section>
 
@@ -622,6 +658,7 @@
         <input id="clF" placeholder="search claim, serial, customer, phone" style="max-width:320px" oninput="renderClaims()">
         <select id="clS" style="max-width:220px" onchange="renderClaims()"><option value="active">Open / in progress</option><option value="">All</option>
           <option value="replacement">Replacement approved</option><option value="service">Service / repair</option><option value="rejected">Rejected</option><option value="closed">Closed</option></select>
+        <button class="btn ghost sm sortbtn" id="sort-claims" title="Sort by date" onclick="toggleSort('claims',renderClaims)">📅 Newest first ↓</button>
         <span class="tag" id="clCount"></span>
         <div class="spacer"></div><span class="hint">New claims are registered from Lookup → + Claim.</span></div></div>
       <div class="card" style="padding:0;overflow:auto"><div id="clBody"></div></div>
@@ -632,6 +669,10 @@
     <div class="row"><h2 class="section">Others</h2><div class="spacer noprint"></div>
       <button class="btn" onclick="editOther(null)">+ New entry</button></div>
     <p class="lead">A place for miscellaneous notes, reminders and anything that doesn't fit the other modules. Shared across everyone.</p>
+    <div class="card"><div class="row"><input id="othQ" placeholder="search title, note, category…" style="max-width:260px" oninput="renderOthers()">
+      <label class="tag">From</label><input type="date" id="othFrom" style="max-width:150px" onchange="renderOthers()">
+      <label class="tag">To</label><input type="date" id="othTo" style="max-width:150px" onchange="renderOthers()">
+      <button class="btn ghost sm sortbtn" id="sort-others" title="Sort by date" onclick="toggleSort('others',renderOthers)">📅 Newest first ↓</button></div></div>
     <div class="card" style="padding:0;overflow:auto"><div id="othersList"></div></div>
   </section>
 
@@ -991,6 +1032,7 @@ function applyRole(){
   document.getElementById('userChip').textContent=CURRENT_USER.name+(admin?' · Admin':CURRENT_USER.role==='office'?' · Office':sales?' · Sales':' · Operator');
   document.querySelectorAll('#tabs button').forEach(b=>b.style.display=(sales?SALES_TABS.includes(b.dataset.v):(b.dataset.role!=='admin'||admin))?'':'none');
   go(sales?'sales':'dash');
+  if(admin)setTimeout(()=>{try{legacyCloseOut(false);if(CURRENT_VIEW==='dash')renderDash();}catch(e){console.error(e)}},300);
 }
 function renderAdmin(){ showAdmin(ADMIN_SUB); }
 function showAdmin(sub){
@@ -1165,6 +1207,7 @@ function delUser(id){
 
 /* ============================ SETTINGS ============================ */
 function renderSettings(){
+  {const e=document.getElementById('legacyInfo'); if(e){const c=legacyCandidates(); e.textContent=`${c.length} work order(s) before ${dmy(LEGACY_CUTOFF)} · ${c.filter(woLegacyClosed).length} closed · ${slips().filter(p=>p.legacy).length} auto packing slip(s)`+(DB.settings.legacyCutoffDone?'':' · not run yet');}}
   document.getElementById('setWO').value=DB.settings.flagWO;
   document.getElementById('setCut').value=DB.settings.flagCut;
   document.getElementById('setQuilt').value=DB.settings.flagQuilt;
@@ -1314,22 +1357,27 @@ function showWO(sub){
   document.getElementById('woSub-'+sub).style.display='block';
   if(sub==='create')initCreateWO(); if(sub==='all')renderWOAll();
   if(sub==='prod')renderProduction(); if(sub==='inv')renderDocTab('invoice'); if(sub==='tally')renderDocTab('tally');
-  if(sub==='pending')renderPendingSO(); if(sub==='create')showSOLink(); pendingBadge();
+  if(sub==='pending')renderPendingSO(); pendingBadge();
 }
 function initCreateWO(){
   // brand dropdown
   const brands=uniq(DB.products.map(p=>p.brand));
   const bSel=document.getElementById('woBrand');
   if(!bSel.dataset.built||bSel.options.length-1!==brands.length){
+    const cur=bSel.value;
     bSel.innerHTML='<option value="">— select brand —</option>'+brands.map(b=>`<option>${b}</option>`).join('');
-    bSel.dataset.built='1';
+    bSel.dataset.built='1'; bSel.value=cur;
   }
-  // autocomplete datalists from saved orders
+  // autocomplete datalists (shared customer list)
   fillDL('dlCust',customerNames());
-  fillDL('dlCity',uniq(DB.orders.map(o=>o.city)));
+  fillDL('dlCity',uniq(DB.orders.map(o=>o.city).concat((DB.salesOrders||[]).map(s=>s.cust&&s.cust.city))));
   fillDL('dlAgent',uniq(DB.orders.map(o=>o.agent)));
-  document.getElementById('woDateChip').textContent='📅 '+today();
-  if(!editingWO){document.getElementById('woNumChip').textContent='WO #: '+woRef(DB.woSeq)+' (auto)';}
+  if(!editingWO){document.getElementById('woDateChip').textContent='📅 '+today();
+    document.getElementById('woNumChip').textContent='WO #: '+woRef(DB.woSeq)+' (auto)';}
+  if(!WOITEMS.length){WOITEMS=[blankWOItem()];WOI=0;}
+  const ed=document.getElementById('woEditor');
+  if(!document.getElementById('woItemsBox').contains(ed))renderWOItems();
+  if(!WO_PANEL_INIT){WO_PANEL_INIT=true;renderWOSOPanel();}
 }
 function fillDL(id,vals){document.getElementById(id).innerHTML=vals.map(v=>`<option value="${v}">`).join('');}
 function onBrandChange(){
@@ -1343,7 +1391,7 @@ function onModelChange(){
   if(WOCUSTOM)return;
   const id=document.getElementById('woModel').value;
   curProd=DB.products.find(p=>p.id===id)||null;
-  if(curProd&&!editingWO)initActuals();
+  if(curProd)initActuals();
   renderCalc();
 }
 /* ---- Custom BOM builder (one-off recipe inside the work order) ---- */
@@ -1386,8 +1434,16 @@ function rebuildCustomProd(){
   const name=((document.getElementById('woCustName')||{}).value||'').trim()||'Custom';
   const bw=+((document.getElementById('woCustBW')||{}).value)||82;
   curProd={id:null,brand,name,borderWidth:bw,layers:WOCUSTLAYERS};
-  if(WOACT.length!==curProd.layers.length && !editingWO)initActuals();
+  syncActuals();
   renderCalc();
+}
+// keep the "actual used" entries lined up with the BOM lines (keeps what was already entered)
+function woUpdHead(){const h=document.getElementById('woActHead'); if(!h||!WOITEMS[WOI])return; stashWOItem(); h.textContent=woItemTitle(WOITEMS[WOI]);}
+function syncActuals(){
+  if(!curProd)return;
+  const r=computeBOM(curProd,readDims());
+  WOACT=r.lines.map((l,i)=>{const a=WOACT[i], want=l.unit==='CFT'?'cft':'val';
+    return a&&a.type===want?a:(want==='cft'?{type:'cft',rows:[]}:{type:'val',value:''});});
 }
 function readDims(){return{
   L:+document.getElementById('woL').value,W:+document.getElementById('woW').value,
@@ -1400,10 +1456,10 @@ function initActuals(){
 }
 function foamMats(){return DB.materials.filter(m=>CFT_CATS.includes(m.cat));}
 // Actual usage for one line
-function actualLine(i){
-  const a=WOACT[i]; if(!a)return{entered:false,val:0};
+function actualLine(i,act){
+  const a=(act||WOACT)[i]; if(!a)return{entered:false,val:0};
   if(a.type==='cft'){
-    if(!a.rows.length)return{entered:false,val:0};
+    if(!(a.rows||[]).length)return{entered:false,val:0};
     let s=0,any=false; a.rows.forEach(r=>{const c=(r.l*r.w*r.t/1728)*(r.qty||0);
       if(r.l&&r.w&&r.t&&r.qty){any=true; s+=c;}});
     return{entered:any,val:s};
@@ -1411,10 +1467,11 @@ function actualLine(i){
   if(a.value===''||a.value==null||isNaN(+a.value))return{entered:false,val:0};
   return{entered:true,val:+a.value};
 }
-function getResult(){
-  const d=readDims(); const r=computeBOM(curProd,d);
-  const lines=r.lines.map((l,i)=>{const a=actualLine(i);
-    const A=WOACT[i]||{};
+function getResult(prod,dims,act){
+  prod=prod||curProd; const d=dims||readDims(); act=act||WOACT;
+  const r=computeBOM(prod,d);
+  const lines=r.lines.map((l,i)=>{const a=actualLine(i,act);
+    const A=act[i]||{};
     let sheets=null, subUsed=null;
     if(A.type==='cft'){
       sheets=(A.rows||[]).filter(rw=>rw.l&&rw.w&&rw.t&&rw.qty)
@@ -1426,8 +1483,6 @@ function getResult(){
       actual:a.val,entered:a.entered,contingent:a.entered?(a.val-l.total):null,sheets,subUsed};});
   return{lines,errors:r.errors,dims:d};
 }
-// Human-readable description of the foam sizes / material Shiva actually entered.
-// One line per sheet type: "3 pcs - 78x72x2 = 5.850 cft" with its own cubic feet.
 function lineDetailRows(l){
   const base=lineDetailRowsBase(l); return l.spec?['Size: '+l.spec].concat(base):base;}
 function lineDetailRowsBase(l){
@@ -1459,6 +1514,7 @@ function setSubMat(i,v){
 }
 // ---- render full calculator ----
 function renderCalc(){
+  woUpdHead();
   const out=document.getElementById('calcOut'); const errB=document.getElementById('woErr');
   if(!curProd){out.innerHTML='<p class="muted small">Select a brand and model to begin.</p>';errB.className='banner';return;}
   const d=readDims(); const r=computeBOM(curProd,d);
@@ -1528,6 +1584,7 @@ function renderCalc(){
 }
 // ---- live totals without rebuilding inputs (keeps focus) ----
 function refreshTotals(){
+  woUpdHead();
   if(!curProd)return; const d=readDims(); const r=computeBOM(curProd,d);
   r.lines.forEach((l,i)=>{
     const a=WOACT[i];
@@ -1554,80 +1611,178 @@ function addSheet(i){const line=computeBOM(curProd,readDims()).lines[i];
   WOACT[i].rows.push({mat,l:'',w:'',t:'',qty:1});renderCalc();}
 function delSheet(i,j){WOACT[i].rows.splice(j,1);renderCalc();}
 
+/* ---- one work order = one or more products; each product has its own size, qty and BOM ---- */
+let WOITEMS=[], WOI=0, WO_PANEL_INIT=false;
+function blankWOItem(){return {brand:'',prodId:'',custom:false,custLayers:[],custName:'',custBrand:'Napcat',custBW:82,L:'',W:'',H:'',Q:1,act:[],allowSub:false};}
+function itemProd(it){
+  if(!it)return null;
+  if(it.custom)return {id:null,brand:it.custBrand||'Custom',name:(it.custName||'').trim()||'Custom',borderWidth:+it.custBW||82,layers:it.custLayers||[]};
+  return DB.products.find(p=>p.id===it.prodId)||null;
+}
+function itemDims(it){return {L:+it.L||0,W:+it.W||0,H:+it.H||0,Q:+it.Q||0};}
+function stashWOItem(){
+  const it=WOITEMS[WOI]; if(!it)return;
+  const g=id=>{const e=document.getElementById(id);return e?e.value:'';};
+  Object.assign(it,{brand:g('woBrand'),prodId:WOCUSTOM?'':g('woModel'),custom:!!WOCUSTOM,custLayers:WOCUSTLAYERS,
+    custName:g('woCustName'),custBrand:g('woCustBrand')||'Napcat',custBW:+g('woCustBW')||82,
+    L:g('woL'),W:g('woW'),H:g('woH'),Q:g('woQ'),act:WOACT,allowSub:!!(document.getElementById('woAllowSub')||{}).checked});
+}
+function fillModels(brand){
+  document.getElementById('woModel').innerHTML='<option value="">— select model —</option>'+
+    DB.products.filter(p=>p.brand===brand).map(p=>`<option value="${p.id}">${p.name}</option>`).join('');
+}
+function loadWOItem(i){
+  const it=WOITEMS[i]; if(!it)return;
+  const set=(id,v)=>{const e=document.getElementById(id); if(e)e.value=v==null?'':v;};
+  WOCUSTOM=!!it.custom; WOCUSTLAYERS=it.custLayers||(it.custLayers=[]); WOACT=it.act||(it.act=[]);
+  const prod=itemProd(it);
+  set('woBrand',it.custom?'':(it.brand||(prod&&prod.brand)||'')); fillModels(document.getElementById('woBrand').value);
+  set('woModel',it.custom?'':it.prodId);
+  document.getElementById('woCustom').checked=WOCUSTOM;
+  document.getElementById('woCustomBox').style.display=WOCUSTOM?'':'none';
+  document.getElementById('woBrand').disabled=WOCUSTOM; document.getElementById('woModel').disabled=WOCUSTOM;
+  set('woCustName',it.custName); set('woCustBrand',it.custBrand||'Napcat'); set('woCustBW',it.custBW||82);
+  set('woL',it.L); set('woW',it.W); set('woH',it.H); set('woQ',it.Q===''?1:it.Q);
+  document.getElementById('woAllowSub').checked=!!it.allowSub;
+  curProd=prod;
+  if(WOCUSTOM)renderWOCustom();
+  if(curProd)syncActuals();
+  renderCalc();
+}
+function woItemTitle(it){const p=itemProd(it); if(!p)return 'Not selected yet';
+  const d=itemDims(it); return `${p.brand} · ${p.name}${d.L?` · ${d.L}×${d.W}×${d.H}"`:''} · Qty ${d.Q||0}`;}
+function woItemSOChip(it){
+  if(!it.soId)return '';
+  const so=soById(it.soId), line=so&&so.items[it.soLine];
+  return `<span class="chip" title="${escH(line?itemDesc(line):'')}">📥 ${escH(it.soNo||(so&&so.no)||'SO')} · item ${(+it.soLine||0)+1}</span>
+    <button class="btn ghost sm" title="Remove the link to the sales order (the product stays)" onclick="woUnlinkSO(${WOITEMS.indexOf(it)})">unlink</button>`;
+}
+function woItemSONote(it){
+  if(!it.soId)return '';
+  const so=soById(it.soId), line=so&&so.items[it.soLine]; if(!line)return '';
+  const bits=[line.desc?`📝 ${escH(line.desc)}`:'',(so.extras||[]).length?`➕ Extras on the order: ${escH(so.extras.map(e=>e.desc).join('; '))}`:'',so.remarks?`💬 ${escH(so.remarks)}`:'',
+    line.type!=='custom'&&!DB.products.find(p=>normName(p.brand)===normName(line.brand)&&normName(p.name)===normName(line.model))?'⚠ This model has no BOM in Products & BOM yet — build the layers (custom BOM).':''].filter(Boolean);
+  return bits.length?`<div class="banner info" style="display:block;margin:0 0 12px 0">${bits.join('<br>')}</div>`:'';
+}
+function renderWOItems(){
+  const home=document.getElementById('woEditorHome'), ed=document.getElementById('woEditor');
+  home.appendChild(ed);
+  const n=WOITEMS.length;
+  document.getElementById('woItemsBox').innerHTML=WOITEMS.map((it,i)=>{
+    const rm=n>1?`<button class="btn danger ghost sm" onclick="woRemoveItem(${i})">✕ Remove</button>`:'';
+    if(i===WOI)return `<div class="pbox active" id="wobox_${i}"><div class="ph"><span class="pnum">Product ${i+1}${n>1?' of '+n:''}</span><b id="woActHead">${escH(woItemTitle(it))}</b>${woItemSOChip(it)}<div class="spacer"></div><span class="tag">editing</span>${rm}</div>
+      <div class="pb">${woItemSONote(it)}<div id="woEditSlot"></div></div></div>`;
+    const prod=itemProd(it); let body='<p class="muted small">Not filled yet — click Edit.</p>';
+    if(prod){const r=getResult(prod,itemDims(it),it.act||[]);
+      body=(r.errors.length?`<div class="banner err" style="display:block">⚠ ${escH(r.errors.join(' '))}</div>`:'')+
+      `<table class="oneline"><thead><tr><th>Material</th><th>Details</th><th class="num">Recommended</th><th class="num">Actual</th><th class="num">Contingent</th><th>Unit</th></tr></thead><tbody>${r.lines.map(l=>`<tr><td>${escH(l.name)}</td><td class="ell">${escH(lineDetailText(l).replace(/\n/g,' · '))}</td>
+        <td class="num">${fmt(l.recommended,3)}</td><td class="num">${l.entered?fmt(l.actual,3):'—'}</td><td class="num">${l.contingent==null?'—':(l.contingent>0?'+':'')+fmt(l.contingent,3)}</td><td>${l.unit}</td></tr>`).join('')}</tbody></table>`;}
+    return `<div class="pbox" id="wobox_${i}"><div class="ph"><span class="pnum">Product ${i+1} of ${n}</span><b>${escH(woItemTitle(it))}</b>${woItemSOChip(it)}<div class="spacer"></div>
+      <button class="btn sm" onclick="woEditItem(${i})">✎ Edit</button>${rm}</div><div class="pb">${body}</div></div>`;
+  }).join('');
+  document.getElementById('woEditSlot').appendChild(ed);
+  loadWOItem(WOI);
+}
+function woEditItem(i){stashWOItem();WOI=i;renderWOItems();const b=document.getElementById('wobox_'+i);if(b)b.scrollIntoView({behavior:'smooth',block:'start'});}
+function woAddItem(pre){stashWOItem();WOITEMS.push(pre||blankWOItem());WOI=WOITEMS.length-1;renderWOItems();renderWOSOPanel();
+  const b=document.getElementById('wobox_'+WOI);if(b)b.scrollIntoView({behavior:'smooth',block:'start'});}
+function woRemoveItem(i){
+  stashWOItem(); const it=WOITEMS[i];
+  if(!confirm(`Remove product ${i+1} (${woItemTitle(it)}) from this work order?`))return;
+  WOITEMS.splice(i,1); if(!WOITEMS.length)WOITEMS=[blankWOItem()];
+  if(WOI>=WOITEMS.length)WOI=WOITEMS.length-1; else if(i<WOI)WOI--;
+  renderWOItems(); renderWOSOPanel(); toast('Product removed from the work order','info');
+}
+function woUnlinkSO(i){stashWOItem();const it=WOITEMS[i];delete it.soId;delete it.soLine;delete it.soNo;renderWOItems();renderWOSOPanel();}
+// turn the WO form into a saved order record (top-level fields kept for older screens / reports)
+function buildItemRecord(it){
+  const prod=itemProd(it), res=getResult(prod,itemDims(it),it.act||[]);
+  const rec={brand:prod.brand,model:prod.name,productId:prod.id||null,custom:!!it.custom,
+    custLayers:it.custom?JSON.parse(JSON.stringify(prod.layers)):undefined,borderWidth:prod.borderWidth,
+    ...res.dims,lines:res.lines,subs:orderSubs(res.lines),act:JSON.parse(JSON.stringify(it.act||[]))};
+  if(it.soId){rec.soId=it.soId;rec.soLine=it.soLine;rec.soNo=it.soNo;}
+  return {rec,errors:res.errors};
+}
+function woMirror(o){
+  const its=o.items, f=its[0];
+  o.brand=uniq(its.map(i=>i.brand)).join(' + ');
+  o.model=its.length>1?its.map(i=>i.model).join(' + '):f.model;
+  o.productId=its.length>1?null:f.productId; o.custom=its.length>1?its.some(i=>i.custom):f.custom;
+  o.custLayers=its.length>1?undefined:f.custLayers; o.borderWidth=f.borderWidth;
+  o.L=f.L;o.W=f.W;o.H=f.H; o.Q=its.reduce((a,i)=>a+(+i.Q||0),0);
+  o.lines=its.length>1?its.flatMap((it,k)=>it.lines.map(l=>({...l,item:k,prod:it.model}))):f.lines;
+  o.subs=its.flatMap(i=>i.subs||[]); o.act=f.act;
+  const so=its.find(i=>i.soId);
+  if(so){o.soId=so.soId;o.soNo=uniq(its.map(i=>i.soNo)).join(', ');o.soLine=its.length>1?null:f.soLine;}
+  else{delete o.soId;delete o.soNo;delete o.soLine;}
+  o.multi=its.length>1;
+  return o;
+}
+function woItems(o){
+  if(o&&o.items&&o.items.length)return o.items;
+  return [{brand:o.brand,model:o.model,productId:o.productId,custom:o.custom,custLayers:o.custLayers,borderWidth:o.borderWidth,
+    L:o.L,W:o.W,H:o.H,Q:o.Q,lines:o.lines||[],subs:o.subs||[],act:o.act,soId:o.soId,soLine:o.soLine,soNo:o.soNo}];
+}
+function woModelText(o){const its=woItems(o); return its.length>1?its.map(i=>`${i.model} ×${i.Q}`).join(', '):`${o.brand} · ${o.model}`;}
+function woSizeText(o){return woItems(o).map(i=>`${i.L}×${i.W}×${i.H}`).join(', ');}
 function formToOrder(){
-  const res=getResult();
-  return {res, o:{brand:curProd.brand,model:curProd.name,productId:curProd.id||null,
-    custom:!!WOCUSTOM, custLayers:WOCUSTOM?JSON.parse(JSON.stringify(curProd.layers)):undefined, borderWidth:curProd.borderWidth,
-    cust:val('woCust'),city:val('woCity'),agent:val('woAgent'),delivery:val('woDelivery'),
-    ...res.dims,lines:res.lines,subs:orderSubs(res.lines),act:JSON.parse(JSON.stringify(WOACT))}};
+  stashWOItem();
+  const errors=[], items=[];
+  WOITEMS.forEach((it,k)=>{
+    const tag=WOITEMS.length>1?`Product ${k+1}: `:'';
+    const prod=itemProd(it);
+    if(!prod){errors.push(tag+'select a brand and model, or tick Custom product and add layers.');return;}
+    if(it.custom){if(!(prod.layers&&prod.layers.length))errors.push(tag+'add at least one layer to the custom BOM.');
+      if(!(it.custName||'').trim())errors.push(tag+'enter a custom name / reference.');}
+    const {rec,errors:e}=buildItemRecord(it); e.forEach(x=>errors.push(tag+x)); items.push(rec);
+  });
+  const o={cust:val('woCust'),city:val('woCity'),agent:val('woAgent'),delivery:val('woDelivery'),items};
+  if(items.length===WOITEMS.length&&items.length)woMirror(o);
+  return {errors,o};
 }
 function val(id){return document.getElementById(id).value.trim();}
 function saveWO(){
-  if(!curProd){alert("Select a brand and model first, or turn on Custom order and add layers.");return;}
-  if(WOCUSTOM){ if(!(curProd.layers&&curProd.layers.length)){alert("Add at least one layer to the custom BOM.");return;}
-    if(!((document.getElementById('woCustName').value||'').trim())){alert("Enter a custom name / reference.");return;} }
-  const {res,o}=formToOrder();
-  if(res.errors.length){alert("Fix the highlighted errors before saving:\n\n"+res.errors.join("\n"));return;}
-  if(!o.cust){alert("Enter a customer name.");return;}
+  const {errors,o}=formToOrder();
+  if(errors.length){alert("Fix these before saving:\n\n"+errors.join("\n"));return;}
+  if(!o.cust){alert("Enter a customer name.");document.getElementById('woCust').focus();return;}
   { const c=custConfirm(o.cust); if(c==null){document.getElementById('woCust').focus();return;} o.cust=c; document.getElementById('woCust').value=c; }
+  const linked=o.items.some(i=>i.soId);
   if(editingWO){
-    const ex=DB.orders.find(x=>x.id===editingWO); Object.assign(ex,o); logEdit(ex);
-    save();toast("Work order "+ex.num+" updated");editingWO=null;
+    const ex=DB.orders.find(x=>x.id===editingWO);
+    ['soId','soNo','soLine','productId','custLayers'].forEach(k=>delete ex[k]);
+    Object.assign(ex,o); logEdit(ex);
+    save();toast("Work order "+ex.num+" updated"+(o.items.length>1?` — ${o.items.length} products`:''));editingWO=null;
   } else {
     if(DB.orders.length>=2000){alert("Storage limit of 2000 work orders reached. Export & archive older ones.");return;}
     o.id=uid();o.num=woRef(DB.woSeq);o.date=today();o.createdAt=new Date().toISOString();o.createdBy=CURRENT_USER?CURRENT_USER.name:'';
-    if(SO_LINK){o.soId=SO_LINK.soId;o.soLine=SO_LINK.line;o.soNo=SO_LINK.no;}
     DB.orders.push(o);DB.woSeq++;
-    save();toast("Work order "+o.num+" created"+(o.soNo?" for sales order "+o.soNo:""));
-    if(o.soNo)setTimeout(()=>showWO('pending'),0);
+    save();toast("Work order "+o.num+" created"+(o.items.length>1?` — ${o.items.length} products`:'')+(o.soNo?" for sales order "+o.soNo:""));
   }
   resetWOForm();
+  if(linked&&soPending().length)setTimeout(()=>showWO('pending'),0);
 }
 function resetWOForm(){
-  editingWO=null; curProd=null; SO_LINK=null; showSOLink();
-  ['woCust','woCity','woAgent','woDelivery','woL','woW','woH'].forEach(id=>document.getElementById(id).value='');
-  document.getElementById('woQ').value=1;
-  document.getElementById('woBrand').value='';document.getElementById('woModel').innerHTML='<option value="">— select model —</option>';
-  const sc=document.getElementById('woAllowSub'); if(sc)sc.checked=false;
-  WOCUSTOM=false; WOCUSTLAYERS=[];
-  const cc=document.getElementById('woCustom'); if(cc)cc.checked=false;
-  document.getElementById('woCustomBox').style.display='none';
-  document.getElementById('woBrand').disabled=false; document.getElementById('woModel').disabled=false;
-  document.getElementById('woCustName').value='';
-  WOACT=[]; renderCalc(); initCreateWO();
+  editingWO=null; curProd=null;
+  ['woCust','woCity','woAgent','woDelivery'].forEach(id=>document.getElementById(id).value='');
+  WOCUSTOM=false; WOCUSTLAYERS=[]; WOACT=[];
+  WOITEMS=[blankWOItem()]; WOI=0;
+  renderWOItems(); renderWOSOPanel(); initCreateWO();
 }
 function editWO(id){
   const o=DB.orders.find(x=>x.id===id); if(!o)return;
-  editingWO=id; WO_SUB='create'; SO_LINK=null;
+  editingWO=id; WO_SUB='create';
+  WOITEMS=woItems(o).map(it=>{
+    const p=it.custom?null:(DB.products.find(x=>x.id===it.productId)||DB.products.find(x=>x.brand===it.brand&&x.name===it.model));
+    return {brand:it.brand,prodId:p?p.id:'',custom:!!it.custom,custLayers:JSON.parse(JSON.stringify(it.custLayers||[])),
+      custName:it.custom?it.model:'',custBrand:it.brand||'Napcat',custBW:it.borderWidth||82,L:it.L,W:it.W,H:it.H,Q:it.Q,
+      act:it.act?JSON.parse(JSON.stringify(it.act)):[],allowSub:!!(it.subs&&it.subs.length),soId:it.soId,soLine:it.soLine,soNo:it.soNo};});
+  WOI=0;
   showWO('create');
-  const cc=document.getElementById('woCustom');
-  if(o.custom){
-    WOCUSTOM=true; if(cc)cc.checked=true;
-    WOCUSTLAYERS=JSON.parse(JSON.stringify(o.custLayers||[]));
-    document.getElementById('woCustomBox').style.display='';
-    document.getElementById('woBrand').disabled=true; document.getElementById('woModel').disabled=true;
-    const bsel=document.getElementById('woCustBrand'); if(bsel && o.brand)bsel.value=o.brand;
-    document.getElementById('woCustName').value=o.model||'';
-    document.getElementById('woCustBW').value=o.borderWidth||82;
-    renderWOCustom();
-    curProd={id:null,brand:o.brand,name:o.model,borderWidth:o.borderWidth||82,layers:WOCUSTLAYERS};
-  } else {
-    WOCUSTOM=false; if(cc)cc.checked=false;
-    document.getElementById('woCustomBox').style.display='none';
-    document.getElementById('woBrand').disabled=false; document.getElementById('woModel').disabled=false;
-    const p=DB.products.find(x=>x.id===o.productId)||DB.products.find(x=>x.brand===o.brand&&x.name===o.model);
-    document.getElementById('woBrand').value=o.brand; onBrandChange();
-    if(p){document.getElementById('woModel').value=p.id; curProd=p;}
-  }
   document.getElementById('woCust').value=o.cust||'';document.getElementById('woCity').value=o.city||'';
   document.getElementById('woAgent').value=o.agent||'';document.getElementById('woDelivery').value=o.delivery||'';
-  document.getElementById('woL').value=o.L;document.getElementById('woW').value=o.W;
-  document.getElementById('woH').value=o.H;document.getElementById('woQ').value=o.Q;
-  WOACT=o.act?JSON.parse(JSON.stringify(o.act)):[]; if(!WOACT.length)initActuals();
-  const sc=document.getElementById('woAllowSub'); if(sc)sc.checked=!!(o.subs&&o.subs.length);
   document.getElementById('woNumChip').textContent='Editing WO #: '+o.num;
   document.getElementById('woDateChip').textContent='📅 '+(o.date||'');
-  renderCalc();
+  renderWOItems(); renderWOSOPanel();
 }
 /* ---- Delete within 48 hours (admins can still delete later, with a typed confirmation) ---- */
 const DEL_HOURS=48;
@@ -1664,6 +1819,17 @@ async function delWO(id){const o=DB.orders.find(x=>x.id===id); if(!o)return;
   if(docs.length)DB.woDocs=DB.woDocs.filter(d=>d.woId!==id);
   renderWO(); toast(`Work order ${o.num} deleted`);
 }
+
+/* ---- shared list tools: sort by date (newest/oldest first) + customer filter ---- */
+const SORTS={};
+function sortLbl(k){return SORTS[k]==='asc'?'📅 Oldest first ↑':'📅 Newest first ↓';}
+function toggleSort(k,fn){SORTS[k]=SORTS[k]==='asc'?'desc':'asc';const b=document.getElementById('sort-'+k);if(b)b.textContent=sortLbl(k);fn();}
+function byDate(list,k,getDate,keepTies){const asc=SORTS[k]==='asc';
+  return list.map((x,i)=>({x,i,d:String(getDate(x)||'')})).sort((a,b)=>a.d===b.d?((asc||keepTies)?a.i-b.i:b.i-a.i):(a.d<b.d?(asc?-1:1):(asc?1:-1))).map(z=>z.x);}
+function cfVal(k){const e=document.getElementById('cf-'+k);return e?e.value.trim():'';}
+function custMatch(name,q){return !q||custKey(name).includes(custKey(q));}
+function fillAllCust(){const d=document.getElementById('dlAllCust');if(d)d.innerHTML=customerNames().map(v=>`<option value="${escH(v)}">`).join('');}
+function txt(id){const e=document.getElementById(id);return e?(e.value||'').trim().toLowerCase():'';}
 function inRange(d,from,to){if(from&&d<from)return false;if(to&&d>to)return false;return true;}
 function clearWOFilter(){['woFrom','woTo','woFCust','woFModel'].forEach(id=>{const e=document.getElementById(id);if(e)e.value='';});renderWOAll();}
 function renderWOAll(){
@@ -1671,9 +1837,10 @@ function renderWOAll(){
   const fc=(document.getElementById('woFCust').value||'').trim().toLowerCase();
   const fm=(document.getElementById('woFModel').value||'').trim().toLowerCase();
   fillDL('dlModelAll',uniq(DB.orders.map(o=>o.model)));
-  const list=DB.orders.filter(o=>inRange(o.date||'',from,to)
-    && (!fc || (o.cust||'').toLowerCase().includes(fc))
-    && (!fm || (o.model||'').toLowerCase().includes(fm))).slice().reverse();
+  let list=DB.orders.filter(o=>inRange(o.date||'',from,to)
+    && custMatch(o.cust,fc)
+    && (!fm || (o.model||'').toLowerCase().includes(fm)));
+  const list2=byDate(list,'wo',o=>(o.date||'')+(o.createdAt||'')); list.length=0; list.push(...list2);
   document.getElementById('woCount').textContent=list.length+' of '+DB.orders.length;
   document.getElementById('woAllList').innerHTML= list.length?`<table class="oneline"><thead><tr>
     <th>WO #</th><th>Date</th><th>Customer</th><th>City</th><th>Agent</th><th>Brand · Model</th><th class="num">Size (in)</th><th class="num">Qty</th>
@@ -1682,8 +1849,8 @@ function renderWOAll(){
       <td><b>${o.num}</b>${o.edited?' <span class="pill low" title="Edited">E</span>':''}</td><td>${o.date||''}</td>
       <td class="ell" title="${escH(o.cust||'')}">${escH(o.cust||'-')}</td><td class="ell" title="${escH(o.city||'')}">${escH(o.city||'-')}</td>
       <td class="ell" title="${escH(o.agent||'')}">${escH(o.agent||'-')}</td>
-      <td class="ell" title="${escH(o.brand+' · '+o.model)}">${escH(o.brand)} · ${escH(o.model)}</td>
-      <td class="num">${o.L}×${o.W}×${o.H}</td><td class="num">${o.Q}</td>
+      <td class="ell" title="${escH(woModelText(o))}">${woItems(o).length>1?`<span class="pill pend">${woItems(o).length} products</span> `:''}${escH(woModelText(o))}</td>
+      <td class="num ell" title="${escH(woSizeText(o))}">${escH(woSizeText(o))}</td><td class="num">${o.Q}</td>
       ${ERP_OK?(p=>`<td><span class="pill ${p.cls}" title="made ${p.made}, dispatched ${p.disp} of ${p.Q}">${p.st}</span></td>`)(woProgress(o)):''}
       ${DOCS_OK?`<td>${docStatusCell(o,'invoice')}</td><td>${docStatusCell(o,'tally')}</td>`:''}
       <td class="num noprint acts">
@@ -1694,30 +1861,35 @@ function renderWOAll(){
     +`</tbody></table>`:`<p class="muted small" style="padding:14px">No work orders in this range.</p>`;
 }
 function woSheetHTML(o){
+  const its=woItems(o), multi=its.length>1;
   return `<div class="wo-sheet">
-    <div class="h"><div><div class="t">${(o.brand||'').toUpperCase()} — ${(o.model||'').toUpperCase()}</div>
-      <div class="tag">Work Order</div></div>
+    <div class="h"><div><div class="t">${multi?'WORK ORDER — '+its.length+' PRODUCTS':`${(o.brand||'').toUpperCase()} — ${(o.model||'').toUpperCase()}`}</div>
+      <div class="tag">Work Order${o.soNo?' · Sales order '+escH(o.soNo):''}</div></div>
       <div style="text-align:right"><div class="tag">WORK ORDER #</div><div class="t">${o.num||'-'}</div></div></div>
     <div class="meta">
-      <div><div class="lbl">Customer</div><div class="val">${o.cust||'-'}</div></div>
-      <div><div class="lbl">City</div><div class="val">${o.city||'-'}</div></div>
-      <div><div class="lbl">Agent</div><div class="val">${o.agent||'-'}</div></div>
+      <div><div class="lbl">Customer</div><div class="val">${escH(o.cust||'-')}</div></div>
+      <div><div class="lbl">City</div><div class="val">${escH(o.city||'-')}</div></div>
+      <div><div class="lbl">Agent</div><div class="val">${escH(o.agent||'-')}</div></div>
       <div style="border-right:none"><div class="lbl">Date</div><div class="val">${o.date||'-'}</div></div>
-      <div><div class="lbl">Length</div><div class="val">${o.L}"</div></div>
-      <div><div class="lbl">Breadth</div><div class="val">${o.W}"</div></div>
-      <div><div class="lbl">Height</div><div class="val">${o.H}"</div></div>
-      <div style="border-right:none"><div class="lbl">Quantity</div><div class="val">${o.Q}</div></div>
     </div>
-    <h4>RAW MATERIAL BREAKUP</h4>
-    <table><thead><tr><th style="text-align:left">Product</th><th style="text-align:left">Sizes / details entered</th><th style="text-align:center">Recommended</th><th style="text-align:center">Actual</th><th style="text-align:center">Contingent</th><th style="text-align:center">Metric</th></tr></thead><tbody>
-    ${(o.lines||[]).map(l=>`<tr><td style="text-align:left">${l.name}</td>
-      <td style="text-align:left;white-space:nowrap">${lineDetailHTML(l)}</td>
-      <td style="text-align:center">${fmt(l.recommended,3)}</td>
-      <td style="text-align:center">${l.entered?fmt(l.actual,3):'—'}</td>
-      <td style="text-align:center">${l.contingent==null?'—':(l.contingent>0?'+':'')+fmt(l.contingent,3)}</td>
-      <td style="text-align:center">${l.unit}</td></tr>`).join('')}
-    </tbody></table>
-    ${(o.subs&&o.subs.length)?`<div style="padding:10px 14px" class="tag"><b>Substitutions:</b> ${o.subs.map(s=>`${s.layer} → ${s.used}`).join(' · ')}</div>`:''}
+    ${its.map((it,k)=>`<div style="border:2px solid ${multi?'#2b6cb0':'transparent'};border-radius:8px;margin:${multi?'10px':'0'}">
+      <div class="meta" style="background:${multi?'#e8f0fe':'transparent'}">
+        <div><div class="lbl">${multi?'Product '+(k+1):'Product'}</div><div class="val">${escH(it.brand)} ${escH(it.model)}</div></div>
+        <div><div class="lbl">Size L×B×H (in)</div><div class="val">${it.L} × ${it.W} × ${it.H}</div></div>
+        <div><div class="lbl">Quantity</div><div class="val">${it.Q}</div></div>
+        <div style="border-right:none"><div class="lbl">Sales order</div><div class="val">${it.soNo?escH(it.soNo)+' · item '+((+it.soLine||0)+1):'-'}</div></div>
+      </div>
+      <h4>RAW MATERIAL BREAKUP${multi?' — PRODUCT '+(k+1):''}</h4>
+      <table><thead><tr><th style="text-align:left">Material</th><th style="text-align:left">Sizes / details entered</th><th style="text-align:center">Recommended</th><th style="text-align:center">Actual</th><th style="text-align:center">Contingent</th><th style="text-align:center">Metric</th></tr></thead><tbody>
+      ${(it.lines||[]).map(l=>`<tr><td style="text-align:left">${l.name}</td>
+        <td style="text-align:left;white-space:nowrap">${lineDetailHTML(l)}</td>
+        <td style="text-align:center">${fmt(l.recommended,3)}</td>
+        <td style="text-align:center">${l.entered?fmt(l.actual,3):'—'}</td>
+        <td style="text-align:center">${l.contingent==null?'—':(l.contingent>0?'+':'')+fmt(l.contingent,3)}</td>
+        <td style="text-align:center">${l.unit}</td></tr>`).join('')}
+      </tbody></table>
+      ${(it.subs&&it.subs.length)?`<div style="padding:10px 14px" class="tag"><b>Substitutions:</b> ${it.subs.map(s=>`${s.layer} → ${s.used}`).join(' · ')}</div>`:''}
+    </div>`).join('')}
     <div style="padding:12px 14px" class="tag">Delivery: ${o.delivery||'-'}</div>
   </div>`;
 }
@@ -1729,14 +1901,12 @@ function viewWO(id){if(isSales())return; const o=DB.orders.find(x=>x.id===id);
 }
 function downloadOnePDF(type){
   if(type==='wo'){
-    if(!curProd){alert("Select a brand and model first.");return;}
-    const {res,o}=formToOrder();
-    if(res.errors.length){alert("Fix errors first:\n\n"+res.errors.join("\n"));return;}
+    const {errors,o}=formToOrder();
+    if(errors.length){alert("Fix these first:\n\n"+errors.join("\n"));return;}
     o.num=editingWO?DB.orders.find(x=>x.id===editingWO).num:woRef(DB.woSeq); o.date=editingWO?(DB.orders.find(x=>x.id===editingWO).date):today();
     pdfWorkOrder(o).save(`WorkOrder-${o.num}.pdf`);
   }
 }
-
 /* ============================ PRODUCTS & BOM ============================ */
 function renderProducts(){
   const brands=[...new Set(DB.products.map(p=>p.brand))];
@@ -1943,7 +2113,9 @@ function showCut(sub){
 }
 function renderCutAll(){
   const from=document.getElementById('cutFrom').value,to=document.getElementById('cutTo').value;
-  const list=DB.cuts.filter(c=>inRange(c.date||'',from,to)).slice().reverse();
+  const cq=txt('cutQ'), cst=(document.getElementById('cutSt')||{}).value||'';
+  const list=byDate(DB.cuts.filter(c=>inRange(c.date||'',from,to)&&(!cq||[c.no,cutGradeName(c),c.supplier,c.invoiceNo,c.notes].join(' ').toLowerCase().includes(cq))
+    &&(!cst||(cst==='completed'?c.status==='completed':c.status!=='completed'))),'cut',c=>(c.date||'')+(c.createdAt||''));
   document.getElementById('cutCount').textContent=list.length+' of '+DB.cuts.length;
   document.getElementById('cutAllList').innerHTML= list.length?`<table class="oneline"><thead><tr>
     <th>Cut #</th><th>Date</th><th>Grade</th><th class="num">Blocks</th><th>Supplier</th><th>Supplier inv.</th><th class="num">Block CFT</th><th class="num">Sheets CFT</th><th class="num">Contingent CFT</th><th class="num">Yield</th><th>Status</th>${DOCS_OK?'<th>Tally</th>':''}<th class="noprint"></th>
@@ -2505,7 +2677,8 @@ function printCut(id){docPDF('cut',id);}
 /* ============================ OTHERS (miscellaneous notes / log) ============================ */
 function renderOthers(){
   const box=document.getElementById('othersList'); if(!box)return;
-  const list=(DB.others||[]).slice().reverse();
+  const oq=txt('othQ'), of=(document.getElementById('othFrom')||{}).value||'', ot=(document.getElementById('othTo')||{}).value||'';
+  const list=byDate((DB.others||[]).filter(o=>inRange(o.date||'',of,ot)&&(!oq||[o.title,o.note,o.category,o.by].join(' ').toLowerCase().includes(oq))),'others',o=>(o.date||'')+(o.at||''));
   box.innerHTML= list.length?`<table><thead><tr><th>Date</th><th>Category</th><th>Title</th><th>Note</th><th>By</th><th class="noprint"></th></tr></thead><tbody>`+
     list.map(o=>`<tr><td>${o.date||''}</td><td>${o.category?`<span class="chip">${o.category}</span>`:''}</td>
       <td><b>${(o.title||'-').replace(/</g,'&lt;')}</b></td><td class="small">${(o.note||'').replace(/</g,'&lt;')}</td><td class="tag">${o.by||''}</td>
@@ -2549,7 +2722,9 @@ function showQuilt(sub){
 }
 function renderQuiltAll(){
   const from=document.getElementById('quiltFrom').value,to=document.getElementById('quiltTo').value;
-  const list=DB.quiltJobs.filter(j=>inRange(j.date||'',from,to)).slice().reverse();
+  const qq=txt('quiltQ'), qst=(document.getElementById('quiltSt')||{}).value||'';
+  const list=byDate(DB.quiltJobs.filter(j=>inRange(j.date||'',from,to)&&(!qq||[j.no,j.quilter,j.fabric,...(j.sets||[]).map(x=>x.fabric+' '+x.foam)].join(' ').toLowerCase().includes(qq))
+    &&(!qst||(qst==='received'?j.status==='received':j.status!=='received'))),'quilt',j=>(j.date||'')+(j.createdAt||''));
   document.getElementById('quiltCount').textContent=list.length+' of '+DB.quiltJobs.length;
   document.getElementById('quiltAllList').innerHTML= list.length?`<table class="oneline"><thead><tr>
     <th>Job #</th><th>Date</th><th>Quilter</th><th>Fabric</th><th class="num">Issued</th><th class="num">Received</th><th>Lots</th><th>Status</th><th class="noprint"></th>
@@ -2734,16 +2909,25 @@ const tableStyle={styles:{fontSize:10,cellPadding:5},
   bodyStyles:{halign:'center'},margin:{left:40,right:40}};
 function pdfWorkOrder(o){
   const doc=jpdf(); if(!doc)return doc;
+  const its=woItems(o), multi=its.length>1;
   pdfHeader(doc,'WORK ORDER','WORK ORDER #',o.num);
-  let y=metaGrid(doc,[['Brand',o.brand],['Model',o.model],['Date',o.date],['Customer',o.cust]],90);
-  y=metaGrid(doc,[['City',o.city],['Agent',o.agent],['Delivery',o.delivery||'-'],['Qty',o.Q]],y+6);
-  y=metaGrid(doc,[['Length',o.L+'"'],['Breadth',o.W+'"'],['Height',o.H+'"'],['',' ']],y+6);
-  doc.autoTable({startY:y+6,head:[['Product','Sizes / details entered','Recommended','Actual','Contingent','Metric']],
-    body:(o.lines||[]).map(l=>[l.name,lineDetailText(l),fmt(l.recommended,3),l.entered?fmt(l.actual,3):'—',
-      l.contingent==null?'—':(l.contingent>0?'+':'')+fmt(l.contingent,3),l.unit]),
-    ...tableStyle, columnStyles:{0:{halign:'left'},1:{halign:'left'}}});
-  if(o.subs&&o.subs.length){doc.setFontSize(9);doc.setTextColor(90);
-    doc.text('Substitutions: '+o.subs.map(s=>`${s.layer} -> ${s.used}`).join('; '),40,doc.lastAutoTable.finalY+18);doc.setTextColor(0);}
+  let y=metaGrid(doc,[['Customer',o.cust],['City',o.city],['Agent',o.agent],['Date',o.date]],90);
+  y=metaGrid(doc,[['Delivery',o.delivery||'-'],['Products',its.length],['Total qty',o.Q],['Sales order',o.soNo||'-']],y+6);
+  its.forEach((it,k)=>{
+    if(y>650){doc.addPage();y=50;}
+    doc.setFillColor(232,240,254);doc.setDrawColor(43,108,176);doc.roundedRect(40,y+4,515,22,3,3,'FD');
+    doc.setFont('helvetica','bold');doc.setFontSize(11);doc.setTextColor(0);
+    doc.text(`${multi?'PRODUCT '+(k+1)+' of '+its.length+'  —  ':''}${(it.brand||'').toUpperCase()} ${(it.model||'').toUpperCase()}`,48,y+19);
+    doc.text(`${it.L} x ${it.W} x ${it.H} in   |   Qty ${it.Q}`,547,y+19,{align:'right'});
+    doc.autoTable({startY:y+30,head:[['Material','Sizes / details entered','Recommended','Actual','Contingent','Metric']],
+      body:(it.lines||[]).map(l=>[l.name,lineDetailText(l),fmt(l.recommended,3),l.entered?fmt(l.actual,3):'—',
+        l.contingent==null?'—':(l.contingent>0?'+':'')+fmt(l.contingent,3),l.unit]),
+      ...tableStyle, columnStyles:{0:{halign:'left'},1:{halign:'left'}}});
+    y=doc.lastAutoTable.finalY+6;
+    if(it.subs&&it.subs.length){doc.setFontSize(9);doc.setTextColor(90);doc.setFont('helvetica','normal');
+      doc.text('Substitutions: '+it.subs.map(s=>`${s.layer} -> ${s.used}`).join('; '),40,y+10);doc.setTextColor(0);y+=14;}
+    y+=12;
+  });
   return doc;
 }
 function pdfCut(c){
@@ -2807,10 +2991,10 @@ function docPDF(type,id){
 // Excel export (opens in Excel; offline, no library)
 function exportExcel(type){
   let rows=[];
-  if(type==='wo'){rows.push(['WO #','Date','Brand','Model','Customer','City','Agent','Length','Breadth','Height','Qty','Material','Recommended','Actual','Contingent','Unit']);
-    DB.orders.forEach(o=>(o.lines||[]).forEach((l,i)=>rows.push([i===0?o.num:'',i===0?o.date:'',i===0?o.brand:'',i===0?o.model:'',
-      i===0?o.cust:'',i===0?o.city:'',i===0?o.agent:'',i===0?o.L:'',i===0?o.W:'',i===0?o.H:'',i===0?o.Q:'',
-      l.name,fmt(l.recommended,3),l.entered?fmt(l.actual,3):'',l.contingent==null?'':fmt(l.contingent,3),l.unit])));
+  if(type==='wo'){rows.push(['WO #','Date','Customer','City','Agent','Product #','Brand','Model','Length','Breadth','Height','Qty','Sales order','Material','Recommended','Actual','Contingent','Unit']);
+    DB.orders.forEach(o=>woItems(o).forEach((it,k)=>(it.lines||[]).forEach((l,i)=>{const f=i===0;rows.push([k===0&&f?o.num:'',k===0&&f?o.date:'',k===0&&f?o.cust:'',k===0&&f?o.city:'',k===0&&f?o.agent:'',
+      f?k+1:'',f?it.brand:'',f?it.model:'',f?it.L:'',f?it.W:'',f?it.H:'',f?it.Q:'',f?(it.soNo||''):'',
+      l.name,fmt(l.recommended,3),l.entered?fmt(l.actual,3):'',l.contingent==null?'':fmt(l.contingent,3),l.unit]);})));
   } else if(type==='cut'){rows.push(['Cut #','Date','Grade','Block L (in)','Block B (in)','Block H','H unit','Blocks','Sheet L (in)','Sheet B (in)','Supplier','Invoice #','Block CFT','Sheets out CFT','Contingent CFT','Contingent %','L deficit (in)','B deficit (in)','H deficit (mm)','Notes','Edited','Status','Blocks detail (L×B in × H mm)','Sheets detail']);
     DB.cuts.forEach(c=>{const r=c.result, mm=isMM(c), ct=cutCont(c);
       rows.push([c.no,c.date,cutGradeName(c),c.v===3?'':c.L,c.v===3?'':c.W,c.v===3?'':c.H,mm?'mm':'in',c.qty,mm?(c.sL||c.L):c.L,mm?(c.sW||c.W):c.W,c.supplier||'',c.invoiceNo||'',fmt(blockCFT(c),3),r?fmt(r.sheetsCFT,3):'',
@@ -3058,7 +3242,7 @@ function soTotals(so){
 }
 function soNo(so){return so.no||'SO-?';}
 function soById(id){return (DB.salesOrders||[]).find(s=>s.id===id);}
-function soWOs(so,line){return DB.orders.filter(o=>o.soId===so.id&&(line==null||o.soLine===line));}
+function soWOs(so,line){return DB.orders.filter(o=>woItems(o).some(it=>it.soId===so.id&&(line==null||it.soLine===line)));}
 function itemDesc(it){
   const size=`${fmt(it.L,2)}×${fmt(it.W,2)}×${fmt(it.H,2)}"`;
   return it.type==='custom'?`Custom mattress · ${size}`:`${it.brand} ${it.model} · ${it.sizeName==='Custom'?'Custom size':it.sizeName} · ${it.thk} · ${size}`;
@@ -3066,13 +3250,15 @@ function itemDesc(it){
 // stage of one sales order line, from its work orders
 const SO_STAGES=['Awaiting WO','WO created','In production','Ready','Part packed','Packed','Invoiced'];
 function soLineStage(so,idx){
-  const it=so.items[idx], wos=soWOs(so,idx), need=+it.qty||0;
-  if(!wos.length)return {rank:0,woQ:0,packed:0,wos,short:need};
-  let woQ=0,packed=0,made=0,started=false;
-  wos.forEach(o=>{const p=woProgress(o); woQ+=+o.Q||0; packed+=p.disp; made+=p.made; if(p.issued||p.made>0)started=true;});
-  const inv=wos.every(o=>docsFor(o.id,'invoice').length);
+  const it=so.items[idx], need=+it.qty||0;
+  const pairs=[]; DB.orders.forEach(o=>woItems(o).forEach((w,k)=>{if(w.soId===so.id&&w.soLine===idx)pairs.push({o,k,w});}));
+  const wos=uniq(pairs.map(x=>x.o));
+  if(!pairs.length)return {rank:0,woQ:0,packed:0,wos,short:need};
+  let woQ=0,packed=0,started=false;
+  pairs.forEach(({o,k,w})=>{woQ+=+w.Q||0; packed+=woItemPacked(o,k); const p=woProgress(o); if(p.issued||p.made>0)started=true;});
+  const inv=wos.every(o=>docsFor(o.id,'invoice').length||woLegacyClosed(o));
   let rank=1;
-  if(packed>=need&&need>0)rank=inv?6:5; else if(packed>0)rank=4; else if(made>=need&&need>0)rank=3; else if(started||made>0)rank=2;
+  if(packed>=need&&need>0)rank=inv?6:5; else if(packed>0)rank=4; else if(started)rank=2;
   return {rank,woQ,packed,wos,short:Math.max(0,need-woQ)};
 }
 function soStatus(so){
@@ -3106,8 +3292,8 @@ function visibleSOs(){return (DB.salesOrders||[]).filter(s=>!isSales()||s.create
 function renderSOList(){
   if(salesLocked('soBody'))return;
   const f=(document.getElementById('soF').value||'').trim().toLowerCase(), fs=document.getElementById('soS').value;
-  const all=visibleSOs().slice().sort((a,b)=>(b.createdAt||'').localeCompare(a.createdAt||''));
-  const rows=all.map(s=>({s,st:soStatus(s),t:soTotals(s)})).filter(({s,st})=>
+  const all=byDate(visibleSOs(),'so',s=>(s.date||'')+(s.createdAt||'')), cq=cfVal('so'), sf=document.getElementById('soFrom').value, st2=document.getElementById('soTo').value;
+  const rows=all.filter(s=>custMatch(s.cust&&s.cust.name,cq)&&inRange(s.date||'',sf,st2)).map(s=>({s,st:soStatus(s),t:soTotals(s)})).filter(({s,st})=>
     (!f||[s.no,s.cust&&s.cust.name,s.cust&&s.cust.city,s.cust&&s.cust.phone,s.createdBy,...(s.items||[]).map(itemDesc)].join(' ').toLowerCase().includes(f))&&
     (!fs||(fs==='pending'?s.status==='pending':fs==='rejected'?['rejected','cancelled'].includes(s.status):fs==='open'?(s.status==='approved'&&st.rank<5):fs==='done'?(s.status==='approved'&&st.rank>=5):true)));
   const pend=all.filter(s=>s.status==='pending').length;
@@ -3361,12 +3547,11 @@ function commitSO(){
 }
 
 /* ---------------------------- Workorder ▸ Pending orders ---------------------------- */
-let SO_LINK=null;
 function renderPendingSO(){
   const box=document.getElementById('soPendBody'); if(!box)return;
   if(salesLocked('soPendBody'))return;
   const rows=[]; soPending().forEach(s=>s.items.forEach((it,i)=>{const g=soLineStage(s,i); if(g.short>0)rows.push({s,it,i,g});}));
-  rows.sort((a,b)=>(a.s.reqDate||'9999').localeCompare(b.s.reqDate||'9999')||(a.s.approvedAt||'').localeCompare(b.s.approvedAt||''));
+  const cq=cfVal('pend'); const rows2=byDate(rows.filter(r=>custMatch(r.s.cust.name,cq)),'pend',r=>(r.s.date||'')+(r.s.approvedAt||''),true); rows.length=0; rows.push(...rows2);
   document.getElementById('soPendCount').textContent=rows.length+' item(s) waiting for a work order';
   box.innerHTML=rows.length?`<table class="oneline"><thead><tr><th>SO #</th><th>Approved</th><th>Required by</th><th>Customer</th><th>City</th><th>Product</th><th class="num">Size (in)</th>
     <th class="num">Qty</th><th class="num">WO made</th><th>Notes</th><th>Sales person</th><th class="num"></th></tr></thead><tbody>`+
@@ -3383,39 +3568,65 @@ function renderPendingSO(){
 function pendingBadge(){const b=document.querySelector('#woTabs button[data-w="pending"]'); if(!b)return;
   let n=0; try{soPending().forEach(s=>n+=soLinesShort(s).length);}catch(e){}
   b.textContent='📥 Pending orders'+(n?` (${n})`:'');}
+// Pending orders ▸ Create WO: open the WO form for that customer with this product already added
 function woFromSO(soId,line){
-  const s=soById(soId); if(!s)return; const it=s.items[line], g=soLineStage(s,line);
+  const s=soById(soId); if(!s)return;
   WO_SUB='create'; showWO('create'); resetWOForm();
-  SO_LINK={soId,line,no:s.no};
-  let matched=null;
-  if(it.type!=='custom'){
-    matched=DB.products.find(p=>normName(p.brand)===normName(it.brand)&&normName(p.name)===normName(it.model));
-  }
-  if(matched){document.getElementById('woBrand').value=matched.brand; onBrandChange(); document.getElementById('woModel').value=matched.id; onModelChange();}
-  else{const cc=document.getElementById('woCustom'); cc.checked=true; toggleCustom();
-    const bs=document.getElementById('woCustBrand'); if(bs&&it.brand)bs.value=it.brand;
-    document.getElementById('woCustName').value=(it.type==='custom'?'Custom — ':it.model+' — ')+s.cust.name;}
-  const set=(id,v)=>{const e=document.getElementById(id); if(e)e.value=v==null?'':v;};
+  const set=(id,v)=>{const e=document.getElementById(id); if(e&&!e.value)e.value=v==null?'':v;};
   set('woCust',s.cust.name); set('woCity',s.cust.city); set('woAgent',s.createdBy);
-  set('woL',it.L); set('woW',it.W); set('woH',it.H); set('woQ',Math.max(1,g.short||it.qty));
   if(s.reqDate){const d=Math.round((Date.parse(s.reqDate)-Date.parse(today()))/864e5); if(d>0)set('woDelivery',d+' DAYS');}
-  renderCalc(); showSOLink();
-  toast(`Work order form filled from ${s.no} — check and save`);
+  WOITEMS=[soItemToWOItem(s,line)]; WOI=0; renderWOItems(); renderWOSOPanel();
+  toast(`Product added from ${s.no} — tick more products below if they go in the same work order`);
 }
-function showSOLink(){
-  const b=document.getElementById('woSOBanner'); if(!b)return;
-  if(!SO_LINK){b.style.display='none';b.innerHTML='';return;}
-  const s=soById(SO_LINK.soId), it=s&&s.items[SO_LINK.line];
-  if(!it){SO_LINK=null;b.style.display='none';return;}
-  b.style.display='block';
-  b.innerHTML=`📥 From sales order <b>${escH(s.no)}</b> · item ${SO_LINK.line+1}: ${escH(itemDesc(it))} · qty ${it.qty}
-    ${it.type!=='custom'&&!DB.products.find(p=>normName(p.brand)===normName(it.brand)&&normName(p.name)===normName(it.model))?'<br>⚠ This model has no BOM in Products & BOM yet — build the layers below (custom BOM).':''}
-    ${it.desc?`<div style="white-space:pre-wrap;margin-top:4px">📝 ${escH(it.desc)}</div>`:''}
-    ${(s.extras||[]).length?`<div style="margin-top:4px">➕ Extras: ${escH(s.extras.map(e=>e.desc).join('; '))}</div>`:''}
-    ${s.remarks?`<div style="margin-top:4px">💬 ${escH(s.remarks)}</div>`:''}
-    <div style="margin-top:6px"><button class="btn ghost sm" onclick="SO_LINK=null;showSOLink()">Unlink from sales order</button></div>`;
+function soItemToWOItem(s,line){
+  const it=s.items[line], g=soLineStage(s,line);
+  const m=it.type!=='custom'?DB.products.find(p=>normName(p.brand)===normName(it.brand)&&normName(p.name)===normName(it.model)):null;
+  const base={...blankWOItem(),L:it.L,W:it.W,H:it.H,Q:Math.max(1,g.short||it.qty),soId:s.id,soLine:line,soNo:s.no};
+  if(m)return {...base,brand:m.brand,prodId:m.id};
+  return {...base,custom:true,custBrand:it.brand||'Napcat',custName:it.type==='custom'?'Custom — '+s.cust.name:it.model,
+    custLayers:[{mat:(DB.materials.find(x=>x.cat==='Foam')||DB.materials[0]||{}).id,rule:'foam_rem'}]};
 }
-
+// customer typed in the WO form → show that customer's approved sales-order products still waiting for a WO
+function woSOLinesFor(name){
+  const k=custKey(name); if(k.length<3)return [];
+  const used=new Set(WOITEMS.filter(i=>i.soId).map(i=>i.soId+'#'+i.soLine));
+  const rows=[];
+  soPending().filter(s=>custKey(s.cust.name)===k).forEach(s=>s.items.forEach((it,i)=>{
+    const g=soLineStage(s,i); if(g.short>0&&!used.has(s.id+'#'+i))rows.push({s,it,i,g});}));
+  return rows;
+}
+function renderWOSOPanel(){
+  const box=document.getElementById('woSOPanel'); if(!box)return;
+  if(!SALES_OK){box.innerHTML='';return;}
+  const rows=woSOLinesFor(val('woCust'));
+  if(!rows.length){box.innerHTML='';return;}
+  box.innerHTML=`<div class="pbox-in" style="border-color:var(--accent);background:#f5f8ff">
+    <div class="row"><b>📥 Pending sales orders for this customer</b><span class="tag">tick the products to make in this work order — each one gets its own box below</span></div>
+    <div style="overflow:auto;margin-top:8px"><table class="oneline"><thead><tr><th></th><th>SO #</th><th>Product</th><th class="num">Size (in)</th><th class="num">Qty to make</th><th>Notes</th><th>Sales person</th></tr></thead><tbody>
+    ${rows.map(({s,it,i,g})=>`<tr><td><input type="checkbox" class="woSOPick" style="width:auto" data-so="${s.id}" data-line="${i}"></td>
+      <td><b>${escH(s.no)}</b></td><td class="ell" title="${escH(itemDesc(it))}">${it.type==='custom'?'🧩 Custom mattress':escH(it.brand+' '+it.model+' · '+it.thk)}</td>
+      <td class="num">${fmt(it.L,2)}×${fmt(it.W,2)}×${fmt(it.H,2)}</td><td class="num"><b>${g.short}</b>${g.woQ?` <span class="tag">of ${it.qty}</span>`:''}</td>
+      <td class="ell" title="${escH(it.desc||'')}">${escH(it.desc||'-')}</td><td class="ell">${escH(s.createdBy||'-')}</td></tr>`).join('')}</tbody></table></div>
+    <div class="row" style="margin-top:8px"><label class="row small" style="gap:6px;cursor:pointer"><input type="checkbox" style="width:auto" onchange="document.querySelectorAll('.woSOPick').forEach(c=>c.checked=this.checked)"> select all</label>
+      <div class="spacer"></div><button class="btn g sm" onclick="woAddFromSO()">＋ Add selected to this work order</button></div></div>`;
+}
+function woCustPicked(){
+  const c=custFind(val('woCust'));
+  if(c){document.getElementById('woCust').value=c.name; const ci=document.getElementById('woCity'); if(!ci.value&&c.city)ci.value=c.city;}
+  renderWOSOPanel();
+}
+function woAddFromSO(){
+  const picks=[...document.querySelectorAll('.woSOPick:checked')].map(c=>({s:soById(c.dataset.so),line:+c.dataset.line})).filter(x=>x.s);
+  if(!picks.length){alert('Tick at least one product.');return;}
+  stashWOItem();
+  const blank=it=>!it.prodId&&!it.custom&&!it.L&&!it.soId;
+  if(WOITEMS.length===1&&blank(WOITEMS[0]))WOITEMS=[];
+  picks.forEach(({s,line})=>WOITEMS.push(soItemToWOItem(s,line)));
+  const s0=picks[0].s, set=(id,v)=>{const e=document.getElementById(id); if(e&&!e.value&&v)e.value=v;};
+  set('woCity',s0.cust.city); set('woAgent',s0.createdBy);
+  WOI=WOITEMS.length-picks.length; renderWOItems(); renderWOSOPanel();
+  toast(`${picks.length} product(s) added — check each box's BOM, then Save work order`);
+}
 /* ---------------------------- PDF ---------------------------- */
 function soPDF(id){
   const s=soById(id); if(!s)return; const doc=jpdf(); if(!doc)return;
@@ -3584,7 +3795,7 @@ function commitReceive(){
 }
 function issueModal(woId){
   if(!ERP_OK)return alert('Run erp_setup.sql in Supabase first.');
-  const opts=DB.orders.slice().reverse().map(o=>`<option value="${escH(o.num)}">${escH(o.num)} · ${escH(o.cust||'')} · ${escH(o.model)} × ${o.Q}</option>`).join('');
+  const opts=DB.orders.slice().reverse().map(o=>`<option value="${escH(o.num)}">${escH(o.num)} · ${escH(o.cust||'')} · ${escH(woModelText(o))} · total ${o.Q}</option>`).join('');
   const pre=woId?(DB.orders.find(o=>o.id===woId)||{}).num:'';
   openModal(`<div class="row"><b style="font-size:16px">Issue material to a work order</b><div class="spacer"></div><button class="btn ghost sm" onclick="closeModal()">Cancel</button></div>
     <div class="grid g2" style="margin-top:12px">
@@ -3670,8 +3881,9 @@ function newSerial(o){
 function renderProduction(){
   if(erpLocked('prodBody'))return;
   const f=(document.getElementById('prF').value||'').trim().toLowerCase(), fs=document.getElementById('prS').value;
-  const rows=DB.orders.slice().reverse().map(o=>({o,p:woProgress(o)})).filter(({o,p})=>
-    (!f||[o.num,o.cust,o.model].join(' ').toLowerCase().includes(f)) &&
+  const cq=cfVal('prod'), pf=document.getElementById('prFrom').value, pt=document.getElementById('prTo').value;
+  const rows=byDate(DB.orders,'prod',o=>(o.date||'')+(o.createdAt||'')).map(o=>({o,p:woProgress(o)})).filter(({o,p})=>
+    (!f||[o.num,o.cust,o.model].join(' ').toLowerCase().includes(f)) && custMatch(o.cust,cq) && inRange(o.date||'',pf,pt) &&
     (!fs||(fs==='open'?['Open','In production','Part packed'].includes(p.st):fs==='ready'?p.st==='Ready'||p.st==='Part packed':p.st==='Packed')));
   const t=today();
   document.getElementById('prCount').textContent=rows.length+' work orders';
@@ -3680,8 +3892,8 @@ function renderProduction(){
     rows.map(({o,p})=>{const late=p.due&&p.due<t&&['Open','In production','Part packed'].includes(p.st);
       const pct=p.Q?Math.min(100,Math.round(p.made/p.Q*100)):0;
       return `<tr><td><b>${escH(o.num)}</b></td><td>${dmy(o.date)}</td><td style="${late?'color:var(--danger);font-weight:700':''}">${p.due?dmy(p.due)+(late?' ⚠':''):'-'}</td>
-      <td class="ell" title="${escH(o.cust||'')}">${escH(o.cust||'-')}</td><td class="ell" title="${escH(o.brand+' · '+o.model)}">${escH(o.model)}</td>
-      <td class="num">${o.L}×${o.W}×${o.H}</td><td class="num">${o.Q}</td>
+      <td class="ell" title="${escH(o.cust||'')}">${escH(o.cust||'-')}</td><td class="ell" title="${escH(woModelText(o))}">${escH(woItems(o).length>1?woModelText(o):o.model)}</td>
+      <td class="num ell" title="${escH(woSizeText(o))}">${escH(woSizeText(o))}</td><td class="num">${o.Q}</td>
       <td>${p.issued?'<span class="pill ok">Issued</span>':'<span class="pill pend">Not issued</span>'}</td>
       <td><div style="display:flex;align-items:center;gap:6px"><div style="width:70px;height:7px;background:var(--line);border-radius:4px;overflow:hidden"><div style="width:${p.Q?Math.min(100,Math.round(p.disp/p.Q*100)):0}%;height:100%;background:var(--accent2)"></div></div><span class="small">${p.disp}/${p.Q}</span></div></td>
       <td class="num">${woRemaining(o)}</td><td><span class="pill ${p.cls}">${p.st}</span></td>
@@ -3771,10 +3983,11 @@ function renderDispatch(){
   document.getElementById('dpNew').style.display=isSales()?'none':'';
   const f=(document.getElementById('dpF').value||'').trim().toLowerCase(), fi=document.getElementById('dpInv').value;
   const from=document.getElementById('dpFrom').value,to=document.getElementById('dpTo').value;
-  const all=DB.dispatches.filter(d=>inRange(d.date,from,to)&&(!f||[d.no,d.cust,d.city,d.invoiceNo,d.vehicle,d.lr,(d.woNums||[]).join(' ')].join(' ').toLowerCase().includes(f))).slice().reverse();
-  const ps=all.filter(isPS).filter(p=>!fi||(fi==='none'?!psInvoices(p).length:psInvoices(p).some(isIssue)));
+  const dq=cfVal('disp');
+  const all=byDate(DB.dispatches.filter(d=>inRange(d.date,from,to)&&custMatch(d.cust,dq)&&(!f||[d.no,d.cust,d.city,d.invoiceNo,d.vehicle,d.lr,(d.woNums||[]).join(' ')].join(' ').toLowerCase().includes(f))),'disp',d=>(d.date||'')+(d.createdAt||d.at||''));
+  const ps=all.filter(isPS).filter(p=>!fi||(fi==='none'?(!psInvoices(p).length&&!p.legacy):psInvoices(p).some(isIssue)));
   const old=fi?[]:all.filter(d=>!isPS(d));
-  const notInv=slips().filter(p=>!psInvoices(p).length).length;
+  const notInv=slips().filter(p=>!psInvoices(p).length&&!p.legacy).length;
   document.getElementById('dpReady').textContent=`${slips().length} packing slip(s) · ${notInv} waiting for the Tally invoice`;
   document.getElementById('dispBody').innerHTML=(ps.length?`<table class="oneline"><thead><tr><th>Slip #</th><th>Date</th><th>Customer</th><th>City</th><th>WO #</th>
     <th class="num">Pcs</th><th>Vehicle</th><th>Transporter / LR</th>${DOCS_OK?'<th>Invoice</th>':''}<th class="num"></th></tr></thead><tbody>`+
@@ -3913,7 +4126,8 @@ function renderClaims(){
   if(erpLocked('clBody'))return;
   const f=(document.getElementById('clF').value||'').trim().toLowerCase(), fs=document.getElementById('clS').value;
   const list=DB.claims.filter(c=>(!fs||(fs==='active'?!['rejected','closed'].includes(c.status):c.status===fs))&&
-    (!f||[c.no,c.serial,c.cust,c.phone,c.complaint].join(' ').toLowerCase().includes(f))).slice().reverse();
+    (!f||[c.no,c.serial,c.cust,c.phone,c.complaint].join(' ').toLowerCase().includes(f)));
+  {const l2=byDate(list,'claims',c=>(c.date||'')+(c.at||c.createdAt||'')); list.length=0; list.push(...l2);}
   document.getElementById('clCount').textContent=list.length+' claims';
   document.getElementById('clBody').innerHTML=list.length?`<table class="oneline"><thead><tr><th>Claim #</th><th>Date</th><th>Serial</th><th>Customer</th><th>Phone</th>
     <th>Complaint</th><th>Coverage on claim date</th><th>Status</th><th>Replacement</th><th class="num"></th></tr></thead><tbody>`+
@@ -3972,10 +4186,10 @@ function prodDashHTML(){
   const prog=DB.orders.map(o=>({o,p:woProgress(o)}));
   const open=prog.filter(x=>['Open','In production','Part packed'].includes(x.p.st));
   const late=open.filter(x=>x.p.due&&x.p.due<t);
-  const madeToday=slips().filter(p=>p.date===t).reduce((a,p)=>a+psQty(p),0)+DB.serials.filter(s=>s.status!=='void'&&s.mfgDate===t).length;
-  const madeMonth=slips().filter(p=>monthKey(p.date)===mk).reduce((a,p)=>a+psQty(p),0)+DB.serials.filter(s=>s.status!=='void'&&monthKey(s.mfgDate)===mk).length;
-  const dispMonth=slips().filter(p=>monthKey(p.date)===mk).length;
-  const waiting=slips().filter(p=>!psInvoices(p).length).length;
+  const madeToday=slips().filter(p=>p.date===t&&!p.legacy).reduce((a,p)=>a+psQty(p),0)+DB.serials.filter(s=>s.status!=='void'&&s.mfgDate===t).length;
+  const madeMonth=slips().filter(p=>monthKey(p.date)===mk&&!p.legacy).reduce((a,p)=>a+psQty(p),0)+DB.serials.filter(s=>s.status!=='void'&&monthKey(s.mfgDate)===mk).length;
+  const dispMonth=slips().filter(p=>monthKey(p.date)===mk&&!p.legacy).length;
+  const waiting=slips().filter(p=>!psInvoices(p).length&&!p.legacy).length;
   const low=DB.materials.filter(m=>stockStatus(m)[0]!=='ok').length;
   const openClaims=DB.claims.filter(c=>!['rejected','closed'].includes(c.status)).length;
   // material planned vs issued for this month's work orders
@@ -4008,6 +4222,33 @@ function slips(){return (DB.dispatches||[]).filter(isPS);}
 function psById(id){return (DB.dispatches||[]).find(d=>d.id===id&&isPS(d));}
 function packedQty(woId,exceptPsId){return slips().filter(p=>p.id!==exceptPsId).reduce((s,p)=>s+(p.lines||[]).filter(l=>l.woId===woId).reduce((a,l)=>a+(+l.qty||0),0),0);}
 function legacyDisp(woId){return (DB.serials||[]).filter(s=>s.woId===woId&&s.status==='dispatched').length;}
+
+/* ---- Entries before 10-Oct-2026: no packing slip / invoice / Tally WO will ever be provided → close them out ---- */
+const LEGACY_CUTOFF='2026-10-10';
+function woLegacyClosed(o){return !!(o&&o.legacyClosed);}
+function legacyCandidates(){return DB.orders.filter(o=>(o.date||'')<LEGACY_CUTOFF);}
+function legacyCloseOut(manual){
+  if(!isAdmin()||!CLOUD_OK||!ERP_OK)return;
+  if(!manual&&DB.settings.legacyCutoffDone===LEGACY_CUTOFF)return;
+  let slipsMade=0,pcs=0,closed=0;
+  legacyCandidates().forEach(o=>{
+    if(!o.legacyClosed){o.legacyClosed={cutoff:LEGACY_CUTOFF,at:nowISO(),by:CURRENT_USER.name};closed++;}
+    const lines=woItems(o).map((it,k)=>({k,it,q:woItemRemaining(o,k)})).filter(x=>x.q>0);
+    if(!lines.length)return;
+    const id='old_'+o.id; if(psById(id))return;
+    DB.dispatches.push({id,kind:'ps',legacy:true,no:'OLD-'+o.num,date:o.date||LEGACY_CUTOFF,cust:o.cust||'',city:o.city||'',agent:o.agent||'',
+      address:'',phone:'',vehicle:'',driver:'',transporter:'',lr:'',remarks:`Auto-closed: work order before ${dmy(LEGACY_CUTOFF)} — no packing slip / invoice / Tally WO available`,
+      by:'Auto (before '+dmy(LEGACY_CUTOFF)+')',at:nowISO(),createdAt:nowISO(),
+      lines:lines.map(x=>({woId:o.id,it:x.k,woNum:o.num,brand:x.it.brand,model:x.it.model,L:x.it.L,W:x.it.W,H:x.it.H,qty:x.q})),woNums:[o.num]});
+    slipsMade++; pcs+=lines.reduce((a,x)=>a+x.q,0);
+  });
+  DB.settings.legacyCutoffDone=LEGACY_CUTOFF;
+  save();
+  if(slipsMade||closed||manual)toast(`Entries before ${dmy(LEGACY_CUTOFF)} closed — ${closed} work order(s) marked done for invoice & Tally WO, ${slipsMade} auto packing slip(s) for ${pcs} pcs`,'',7000);
+  if(manual)renderSettings();
+}
+function woItemPacked(o,k,exceptPsId){return slips().filter(p=>p.id!==exceptPsId).reduce((s,p)=>s+(p.lines||[]).filter(l=>l.woId===o.id&&(+l.it||0)===k).reduce((a,l)=>a+(+l.qty||0),0),0);}
+function woItemRemaining(o,k,exceptPsId){const it=woItems(o)[k]; if(!it)return 0; return Math.max(0,(+it.Q||0)-woItemPacked(o,k,exceptPsId)-(k===0?legacyDisp(o.id):0));}
 function woRemaining(o,exceptPsId){return Math.max(0,(+o.Q||0)-packedQty(o.id,exceptPsId)-legacyDisp(o.id));}
 function slipsOf(woId){return slips().filter(p=>(p.lines||[]).some(l=>l.woId===woId));}
 function psQty(p){return (p.lines||[]).reduce((s,l)=>s+(+l.qty||0),0);}
@@ -4020,7 +4261,7 @@ function psModal(id,woId){
   if(!ERP_OK)return alert('Run erp_setup.sql in Supabase first.');
   const p=id?psById(id):null; const o0=woId?DB.orders.find(o=>o.id===woId):null;
   const d=p||{date:today(),cust:o0?o0.cust:'',city:o0?o0.city:'',agent:o0?o0.agent:'',address:'',phone:'',vehicle:'',transporter:'',lr:'',driver:'',remarks:''};
-  PSL=p?JSON.parse(JSON.stringify(p.lines)):(o0?[{woId:o0.id,qty:woRemaining(o0)}]:[]);
+  PSL=p?JSON.parse(JSON.stringify(p.lines)).map(l=>({...l,it:+l.it||0})):(o0?psLinesForWO(o0,null):[]);
   openModal(`<div class="row"><b style="font-size:16px">${p?'Edit packing slip '+escH(p.no):'New packing slip'}</b><div class="spacer"></div><button class="btn ghost sm" onclick="closeModal()">Cancel</button></div>
     <div class="grid g3" style="margin-top:12px">
       <div><label class="f">Date</label><input id="psDate" type="date" value="${d.date}"></div>
@@ -4049,20 +4290,23 @@ function psModal(id,woId){
 function renderPSLines(){
   const ex=window.__psEditing;
   document.getElementById('psLines').innerHTML=PSL.length?`<table class="oneline"><thead><tr><th>WO #</th><th>Product</th><th class="num">Size (in)</th><th class="num">Ordered</th><th class="num">Already packed</th><th class="num">Pack now</th><th></th></tr></thead><tbody>
-    ${PSL.map((l,i)=>{const o=DB.orders.find(x=>x.id===l.woId)||{};const rem=woRemaining(o,ex);
-      return `<tr><td><b>${escH(o.num||'?')}</b></td><td class="ell" title="${escH((o.brand||'')+' '+(o.model||''))}">${escH(o.brand||'')} ${escH(o.model||'')}</td>
-        <td class="num">${o.L}×${o.W}×${o.H}</td><td class="num">${o.Q}</td><td class="num">${(+o.Q||0)-rem}</td>
+    ${PSL.map((l,i)=>{const o=DB.orders.find(x=>x.id===l.woId)||{};const it=(o.id?woItems(o)[l.it||0]:null)||{};const rem=o.id?woItemRemaining(o,l.it||0,ex):0;
+      return `<tr><td><b>${escH(o.num||'?')}</b>${woItems(o).length>1?` <span class="tag">product ${(l.it||0)+1}</span>`:''}</td><td class="ell" title="${escH((it.brand||'')+' '+(it.model||''))}">${escH(it.brand||'')} ${escH(it.model||'')}</td>
+        <td class="num">${it.L}×${it.W}×${it.H}</td><td class="num">${it.Q}</td><td class="num">${(+it.Q||0)-rem}</td>
         <td class="num"><input type="number" min="1" value="${l.qty}" style="max-width:80px;padding:5px 7px;text-align:right" oninput="PSL[${i}].qty=+this.value"></td>
         <td class="num"><button class="btn danger ghost sm" onclick="PSL.splice(${i},1);renderPSLines()">✕</button></td></tr>`;}).join('')}</tbody></table>`
     :'<p class="muted small">Add the work order(s) being packed.</p>';
   const cust=(val('psCust')||'').toLowerCase();
   const opts=DB.orders.filter(o=>woRemaining(o,ex)>0&&!PSL.some(l=>l.woId===o.id))
     .sort((a,b)=>((b.cust||'').toLowerCase()===cust)-((a.cust||'').toLowerCase()===cust));
-  document.getElementById('dlPsWO').innerHTML=opts.map(o=>`<option value="${escH(o.num)}">${escH(o.num)} · ${escH(o.cust||'')} · ${escH(o.model)} ${o.L}×${o.W}×${o.H} · ${woRemaining(o,ex)} left</option>`).join('');
+  document.getElementById('dlPsWO').innerHTML=opts.map(o=>`<option value="${escH(o.num)}">${escH(o.num)} · ${escH(o.cust||'')} · ${escH(woModelText(o))} · ${woRemaining(o,ex)} left</option>`).join('');
 }
+function psLinesForWO(o,ex){const its=woItems(o);
+  const ls=its.map((it,k)=>({woId:o.id,it:k,qty:woItemRemaining(o,k,ex)})).filter(l=>l.qty>0);
+  return ls.length?ls:[{woId:o.id,it:0,qty:1}];}
 function psAddLine(num){const o=DB.orders.find(x=>String(x.num).toLowerCase()===String(num).trim().toLowerCase());
   if(!o)return; if(PSL.some(l=>l.woId===o.id))return;
-  PSL.push({woId:o.id,qty:woRemaining(o,window.__psEditing)||1});
+  psLinesForWO(o,window.__psEditing).forEach(l=>PSL.push(l));
   if(!val('psCust')){document.getElementById('psCust').value=o.cust||'';document.getElementById('psCity').value=o.city||'';document.getElementById('psAgent').value=o.agent||'';}
   renderPSLines();}
 function commitPS(id){
@@ -4072,13 +4316,13 @@ function commitPS(id){
   if(!lines.length)return err('Add at least one work order with a quantity.');
   if(!val('psCust'))return err('Customer is required.');
   { const c=custConfirm(val('psCust')); if(c==null)return; document.getElementById('psCust').value=c; }
-  const over=lines.map(l=>{const o=DB.orders.find(x=>x.id===l.woId);return {o,l,rem:woRemaining(o,id)};}).filter(x=>x.l.qty>x.rem);
-  if(over.length&&!confirm('More than the work order quantity:\n'+over.map(x=>`${x.o.num}: packing ${x.l.qty}, only ${x.rem} left`).join('\n')+'\n\nSave anyway?'))return;
+  const over=lines.map(l=>{const o=DB.orders.find(x=>x.id===l.woId);return {o,l,rem:woItemRemaining(o,+l.it||0,id),it:woItems(o)[+l.it||0]};}).filter(x=>x.l.qty>x.rem);
+  if(over.length&&!confirm('More than the work order quantity:\n'+over.map(x=>`${x.o.num} ${x.it.model}: packing ${x.l.qty}, only ${x.rem} left`).join('\n')+'\n\nSave anyway?'))return;
   const p=id?psById(id):{id:uid(),kind:'ps',no:seqRef('PS-',DB.psSeq++),by:CURRENT_USER.name,at:nowISO(),createdAt:nowISO()};
   Object.assign(p,{date:document.getElementById('psDate').value||today(),cust:val('psCust'),city:val('psCity'),address:val('psAddr'),phone:val('psPhone'),
     agent:val('psAgent'),vehicle:val('psVeh'),driver:val('psDrv'),transporter:val('psTr'),lr:val('psLR'),remarks:val('psRem'),
-    lines:lines.map(l=>{const o=DB.orders.find(x=>x.id===l.woId);return {woId:o.id,woNum:o.num,brand:o.brand,model:o.model,L:o.L,W:o.W,H:o.H,qty:+l.qty};})});
-  p.woNums=p.lines.map(l=>l.woNum);
+    lines:lines.map(l=>{const o=DB.orders.find(x=>x.id===l.woId), k=+l.it||0, it=woItems(o)[k]||o;return {woId:o.id,it:k,woNum:o.num,brand:it.brand,model:it.model,L:it.L,W:it.W,H:it.H,qty:+l.qty};})});
+  p.woNums=uniq(p.lines.map(l=>l.woNum));
   if(!id)DB.dispatches.push(p); else logEdit(p);
   const pr=document.getElementById('psPrint').checked;
   save(); closeModal(); toast(`Packing slip ${p.no} ${id?'updated':'created'}`);
@@ -4158,6 +4402,7 @@ function viewPS(id){const p=psById(id); if(!p)return;
 function psInvCell(p){
   if(!DOCS_OK)return '';
   const ds=psInvoices(p);
+  if(!ds.length&&p.legacy)return `<span class="pill pend" title="Before ${dmy(LEGACY_CUTOFF)} — no invoice to upload">Closed (old)</span>`;
   if(!ds.length)return `<span class="pill pend" title="Office has not uploaded the invoice yet">Not invoiced</span>`;
   const bad=ds.filter(isIssue).length, pend=ds.filter(d=>!d.check).length;
   const [c,t]=bad?['crit',`⚠ ${ds.length}`]:pend?['pend',`${ds.length} · not checked`]:['ok',`✓ ${ds.length}`];
@@ -4226,6 +4471,7 @@ function docStatus(woId,kind){
 }
 function docStatusCell(o,kind){
   const s=docStatus(o.id,kind);
+  if(s.cls==='none'&&woLegacyClosed(o)&&kind!=='tallycut')return `<span class="pill pend" title="Work order before ${dmy(LEGACY_CUTOFF)} — closed, nothing to upload">Closed (old)</span>`;
   if(s.cls==='none')return `<span class="muted">—</span>`;
   return `<span class="pill ${s.cls}" title="${escH(s.tip)}" style="cursor:pointer" onclick='openDocTab("${kind}",${JSON.stringify(o.num||o.no)})'>${s.txt}</span>`;
 }
@@ -4260,9 +4506,11 @@ function renderDocTab(kind){
   if(setup)setup.style.display=DOCS_OK?'none':'block';
   const q=(document.getElementById('docF-'+kind).value||'').trim().toLowerCase();
   const st=document.getElementById('docS-'+kind).value;
-  let list=(DB.woDocs||[]).filter(d=>d.kind===kind).slice().reverse();
+  let list=byDate((DB.woDocs||[]).filter(d=>d.kind===kind),kind,d=>(d.docDate||'')+(d.at||''));
+  const cq=cfVal(kind);
   list=list.filter(d=>{
     const o=parentOf(d)||{};
+    if(cq&&!custMatch(o.cust,cq))return false;
     const hay=[d.woNum,o.cust,o.model,o.supplier,o.mat?cutGradeName(o):'',d.docNo].join(' ').toLowerCase();
     if(q&&!hay.includes(q))return false;
     if(st==='pending'&&d.check)return false;
@@ -4288,8 +4536,8 @@ function renderDocTab(kind){
         <td class="ell" title="${escH(o?o.lines.map(l=>l.qty+'× '+l.model+' '+l.L+'×'+l.W+'×'+l.H).join(', '):'')}">${escH(o?(o.lines[0].model+(o.lines.length>1?' +'+(o.lines.length-1)+' more':'')):'-')}</td>
         <td class="num">${o?`${o.lines[0].L}×${o.lines[0].W}×${o.lines[0].H}`:'-'}</td><td class="num">${o?psQty(o):'-'}</td>`
         :`<td class="ell" title="${escH(o?o.cust:'')}">${escH(o?o.cust||'-':'(deleted WO)')}</td>
-        <td class="ell" title="${escH(o?o.brand+' · '+o.model:'')}">${escH(o?o.model:'-')}</td>
-        <td class="num">${o?`${o.L}×${o.W}×${o.H}`:'-'}</td><td class="num">${o?o.Q:'-'}</td>`}
+        <td class="ell" title="${escH(o?woModelText(o):'')}">${escH(o?(woItems(o).length>1?woModelText(o):o.model):'-')}</td>
+        <td class="num ell" title="${escH(o?woSizeText(o):'')}">${o?escH(woSizeText(o)):'-'}</td><td class="num">${o?o.Q:'-'}</td>`}
         <td><b>${escH(d.docNo||'-')}</b></td><td>${escH(d.docDate||'-')}</td>
         <td class="muted small" title="${escH((d.by||'')+' · '+(d.fileName||''))}">${escH((d.by||'').split(' ')[0])} · ${escH((d.at||'').slice(5,10))}</td>
         <td>${d.check?`<span style="cursor:pointer" onclick='showCheck(${JSON.stringify(d.id)})'>${verdictPill(d)}</span>`:verdictPill(d)}</td>
@@ -4310,7 +4558,7 @@ function uploadDocModal(kind,woId){
   const K=DOC_KINDS[kind], isCut=kind==='tallycut', isInv=kind==='invoice';
   const opts=isInv?slips().slice().reverse().map(p=>`<option value="${escH(p.no)}">${escH(p.no)} · ${dmy(p.date)} · ${escH(p.cust)} · ${psQty(p)} pcs · ${escH(p.woNums.join(', '))}</option>`).join('')
     :isCut?DB.cuts.slice().reverse().map(c=>`<option value="${escH(c.no)}">${escH(c.no)} · ${escH(c.date||'')} · ${escH(cutBrief(c))}</option>`).join('')
-    :DB.orders.slice().reverse().map(o=>`<option value="${escH(o.num)}">${escH(o.num)} · ${escH(o.cust||'')} · ${escH(o.model)} ${o.L}×${o.W}×${o.H} × ${o.Q}</option>`).join('');
+    :DB.orders.slice().reverse().map(o=>`<option value="${escH(o.num)}">${escH(o.num)} · ${escH(o.cust||'')} · ${escH(woModelText(o))}</option>`).join('');
   const pre=woId?(isInv?((psById(woId)||{}).no||((slipsOf(woId)[0]||{}).no)||''):isCut?(DB.cuts.find(c=>c.id===woId)||{}).no:(woById(woId)||{}).num):'';
   if(isInv&&!slips().length){alert('Create a packing slip first (Workorder → Production → 📦 Pack). Invoices are uploaded against packing slips.');return;}
   openModal(`<div class="row"><b style="font-size:16px">Upload ${K.label} (PDF)</b><div class="spacer"></div>
