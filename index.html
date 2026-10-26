@@ -119,6 +119,21 @@
   .pbox>.pb{padding:14px 16px}
   .pbox-in{border:1px dashed var(--line);border-radius:10px;padding:12px;margin-top:12px}
   .pnum{background:var(--accent);color:#fff;border-radius:6px;padding:2px 8px;font-weight:700;font-size:12px}
+  .ps{font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;color:#111;background:#fff;border:1.5px solid #222;border-radius:6px;font-size:12px}
+  .ps .psh{display:flex;justify-content:space-between;align-items:flex-start;padding:12px 16px;border-bottom:1.5px solid #222}
+  .ps .psh .t{font-size:20px;font-weight:800;letter-spacing:.5px}
+  .ps .psm{display:grid;grid-template-columns:2fr 1fr 1fr;border-bottom:1px solid #222}
+  .ps .psm>div{padding:7px 12px;border-right:1px solid #ccc} .ps .psm>div:last-child{border-right:none}
+  .ps .lb{font-size:9px;color:#666;text-transform:uppercase;letter-spacing:.4px} .ps .v{font-weight:700;font-size:13px}
+  .ps .psr{display:grid;grid-template-columns:repeat(4,1fr);border-bottom:1.5px solid #222}
+  .ps .psr>div{padding:6px 12px;border-right:1px solid #ccc} .ps .psr>div:last-child{border-right:none}
+  .ps table{width:100%;border-collapse:collapse;margin:0}
+  .ps th{background:#f0f0f0;font-size:10px;text-transform:uppercase;padding:6px 8px;border-bottom:1px solid #222;text-align:left;color:#111}
+  .ps td{padding:5px 8px;border-bottom:1px solid #ddd;font-size:12px;color:#111}
+  .ps td.n,.ps th.n{text-align:center} .ps tr.tot td{font-weight:800;border-top:1.5px solid #222;border-bottom:none}
+  .ps .pss{display:flex;justify-content:space-between;padding:30px 16px 12px;font-size:11px}
+  .ps .pss span{border-top:1px solid #666;padding-top:4px;min-width:150px;text-align:center}
+  @media print{ .ps{border-color:#000} .ps th{-webkit-print-color-adjust:exact;print-color-adjust:exact} }
   .kpi{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:14px}
   .kpi .v{font-size:26px;font-weight:700} .kpi .l{color:var(--muted);font-size:12px}
   .banner{padding:10px 14px;border-radius:8px;font-size:13px;margin-bottom:12px;display:none}
@@ -145,7 +160,7 @@
   #printArea{display:none}
   @media print{
     body{background:#fff;color:#000}
-    header.top,nav.tabs,main,.noprint{display:none!important}
+    header.top,nav.tabs,main,.noprint,#modal,#toastBox,#login{display:none!important}
     #printArea{display:block!important;padding:0;color:#000}
     #printArea *{color:#000!important}
     .wo-sheet{border:1.5px solid #000}
@@ -548,7 +563,7 @@
       <div class="row"><h2 class="section" style="font-size:16px">Quilting Job Orders</h2><div class="spacer noprint"></div>
         <button class="btn" onclick="editQuilt(null)">+ New quilting job</button></div>
       <p class="lead">Send fabric + quilting foam to your quilter, track it, and record finished quilted fabric in lots on receipt.</p>
-      <div class="grid g4" id="quiltKpis"></div>
+      <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(170px,1fr))" id="quiltKpis"></div>
       <div class="card"><b>Job orders</b>
         <div style="margin-top:10px;overflow:auto" id="quiltList"></div></div>
     </div>
@@ -1063,14 +1078,25 @@ function cutFlag(c){
   return{flag:wastePct>tol,wastePct,reason:`Contingent ${fmt(wastePct,1)}% (${fmt(c.result.blockCFT-c.result.sheetsCFT,3)} CFT of ${fmt(c.result.blockCFT,3)} CFT block)`};
 }
 function quiltRecv(j){return (j.receipts||[]).reduce((s,r)=>s+(+r.recvM||0),0);}
+// fabric / foam sent back by the quilter WITHOUT quilting (stock comes back)
+function quiltRetFab(j){return (j.returns||[]).reduce((s,r)=>s+(+r.fabM||0),0);}
+function quiltRetFoam(j){return (j.returns||[]).reduce((s,r)=>s+(+r.foamM||0),0);}
+function quiltPending(j){return Math.max(0,+((+j.fabM||0)-quiltRecv(j)-quiltRetFab(j)).toFixed(2));}
+function quiltSetRet(j,i){return (j.returns||[]).reduce((a,r)=>{const x=(r.sets||[])[i]||{};a.fab+=(+x.fabM||0);a.foam+=(+x.foamM||0);return a;},{fab:0,foam:0});}
+// what is still with the quilter, per set (quilted fabric is shared out over the sets by their size)
+function quiltSetLeft(j){const sets=quiltSets(j), iss=quiltIssued(j)||1, rc=quiltRecv(j);
+  return sets.map((x,i)=>{const r=quiltSetRet(j,i), used=rc*(+x.fabM||0)/iss, ratio=(+x.fabM||0)?(+x.foamM||0)/(+x.fabM):1;
+    return {fab:Math.max(0,+((+x.fabM||0)-used-r.fab).toFixed(2)),foam:Math.max(0,+((+x.foamM||0)-used*ratio-r.foam).toFixed(2))};});}
+function quiltStatusTxt(j){const rc=quiltRecv(j), rt=quiltRetFab(j);
+  return j.status==='received'?'CLOSED':(rc>0||rt>0?'PARTIAL':'ISSUED');}
 function quiltSets(j){return (j.sets&&j.sets.length)?j.sets:[{fabric:j.fabric||'',fabM:+j.fabM||0,foam:j.foam||'',foamM:+j.foamM||0}];}
 function quiltIssued(j){return quiltSets(j).reduce((s,x)=>s+(+x.fabM||0),0);}
 function quiltFoamTotal(j){return quiltSets(j).reduce((s,x)=>s+(+x.foamM||0),0);}
 function quiltFlag(j){
   const issued=Number(j.fabM||0); if(!issued)return{flag:false};
-  const recv=quiltRecv(j); const shortPct=(issued-recv)/issued*100;
+  const recv=quiltRecv(j), ret=quiltRetFab(j); const shortPct=(issued-recv-ret)/issued*100;
   const tol=Number(DB.settings.flagQuilt||0);
-  return{flag:shortPct>tol,shortPct,recv,issued,reason:`Received ${fmt(recv,1)}m of ${issued}m issued — short ${fmt(shortPct,1)}%`};
+  return{flag:j.status==='received'&&shortPct>tol,shortPct,recv,issued,reason:`Received ${fmt(recv,1)}m quilted${ret?` + ${fmt(ret,1)}m returned unquilted`:''} of ${issued}m issued — short ${fmt(shortPct,1)}%`};
 }
 // ---- dismissable flags: acknowledge like a notification, keep a log to reconcile later ----
 function flagReason(type,rec){const f=type==='wo'?woFlag(rec):type==='cut'?cutFlag(rec):quiltFlag(rec);
@@ -1250,7 +1276,7 @@ function renderUserDash(){
       <td><b>${c.no}</b></td><td>${c.date||''}</td><td>${cutGradeName(c)}</td>
       <td>${statusPill(c.status==='completed'?'DONE':'ISSUED',c.status==='completed'?'ok':'low')}</td></tr>`).join('')
     :`<tr><td colspan="4" class="muted small">No cutting orders yet.</td></tr>`;
-  const quRows=qu.length?qu.map(j=>{const st=j.status==='received'?'CLOSED':(quiltRecv(j)>0?'PARTIAL':'ISSUED');
+  const quRows=qu.length?qu.map(j=>{const st=quiltStatusTxt(j);
       return `<tr onclick='viewQuilt(${JSON.stringify(j.id)})' style="cursor:pointer">
       <td><b>${j.no}</b></td><td>${j.quilter||'-'}</td><td class="num">${fmt(quiltRecv(j),1)}/${j.fabM||0}m</td>
       <td>${statusPill(st,st==='CLOSED'?'ok':'low')}</td></tr>`;}).join('')
@@ -1325,8 +1351,8 @@ function renderAdminDash(){
       ${quE.length?`<div class="tag" style="margin-top:8px">Edited: `+quE.map(j=>`<a onclick='viewQuilt(${JSON.stringify(j.id)})' style="cursor:pointer;color:var(--warn)">${j.no}${lastEdit(j)?' ('+lastEdit(j).by+')':''}</a>`).join(' · ')+`</div>`:''}
       <div class="divider"></div><b class="small">Materials sent out — return status</b>
       <table style="margin-top:6px"><thead><tr><th>Job #</th><th>Quilter</th><th class="num">Issued</th><th class="num">Received</th><th>Return status</th></tr></thead><tbody>
-      ${DB.quiltJobs.slice().reverse().slice(0,20).map(j=>{const rc=quiltRecv(j);const rem=(+j.fabM||0)-rc;
-        const st=j.status==='received'?['RECEIVED BACK','ok']:(rc>0?['PARTIAL — '+fmt(rem,1)+'m pending','low']:['NOT RETURNED','crit']);
+      ${DB.quiltJobs.slice().reverse().slice(0,20).map(j=>{const rc=quiltRecv(j);const rem=quiltPending(j);
+        const st=j.status==='received'?['RECEIVED BACK','ok']:(rc>0||quiltRetFab(j)>0?['PARTIAL — '+fmt(rem,1)+'m pending','low']:['NOT RETURNED','crit']);
         return `<tr onclick='viewQuilt(${JSON.stringify(j.id)})' style="cursor:pointer">
           <td><b>${j.no}</b></td><td>${j.quilter||'-'}</td><td class="num">${j.fabM||0}m</td><td class="num">${fmt(rc,1)}m</td>
           <td>${statusPill(st[0],st[1])}</td></tr>`;}).join('')||`<tr><td colspan="5" class="muted small">No quilting jobs.</td></tr>`}
@@ -2727,15 +2753,15 @@ function renderQuiltAll(){
     &&(!qst||(qst==='received'?j.status==='received':j.status!=='received'))),'quilt',j=>(j.date||'')+(j.createdAt||''));
   document.getElementById('quiltCount').textContent=list.length+' of '+DB.quiltJobs.length;
   document.getElementById('quiltAllList').innerHTML= list.length?`<table class="oneline"><thead><tr>
-    <th>Job #</th><th>Date</th><th>Quilter</th><th>Fabric</th><th class="num">Issued</th><th class="num">Received</th><th>Lots</th><th>Status</th><th class="noprint"></th>
-    </tr></thead><tbody>`+list.map(j=>{const rc=quiltRecv(j);const st=j.status==='received'?'CLOSED':(rc>0?'PARTIAL':'ISSUED');
+    <th>Job #</th><th>Date</th><th>Quilter</th><th>Fabric</th><th class="num">Issued</th><th class="num">Quilted</th><th class="num">Returned</th><th class="num">Pending</th><th>Lots</th><th>Status</th><th class="noprint"></th>
+    </tr></thead><tbody>`+list.map(j=>{const rc=quiltRecv(j);const st=quiltStatusTxt(j), rt=quiltRetFab(j);
       return `<tr><td><b>${j.no}</b>${j.edited?' <span class="pill low">EDITED</span>':''}</td><td>${j.date||''}</td><td>${j.quilter||'-'}</td><td>${(j.sets&&j.sets.length>1)?('<b>'+j.sets.length+' sets</b> · '):''}${j.fabric||'-'}</td>
-      <td class="num">${j.fabM||0}m</td><td class="num">${fmt(rc,1)}m</td><td>${(j.receipts||[]).length}</td>
+      <td class="num">${j.fabM||0}m</td><td class="num">${fmt(rc,1)}m</td><td class="num">${rt?fmt(rt,1)+'m':'-'}</td><td class="num">${j.status==='received'?'—':fmt(quiltPending(j),1)+'m'}</td><td>${(j.receipts||[]).length}</td>
       <td><span class="pill ${st==='CLOSED'?'ok':'low'}">${st}</span></td>
       <td class="num noprint">
         <button class="btn ghost sm" onclick='viewQuilt(${JSON.stringify(j.id)})'>View</button>
         <button class="btn ghost sm" onclick='docPDF("quilt",${JSON.stringify(j.id)})'>PDF</button>
-        ${j.status!=='received'?`<button class="btn g sm" onclick='addReceipt(${JSON.stringify(j.id)})'>+Lot</button>`:''}
+        ${j.status!=='received'?`<button class="btn g sm" onclick='addReceipt(${JSON.stringify(j.id)})'>+ Receive / return</button>`:''}
         <button class="btn ghost sm" onclick='editQuilt(${JSON.stringify(j.id)})'>Edit</button>
         ${delBtn('quilt',j)}</td></tr>`;}).join('')
     +`</tbody></table>`:`<p class="muted small" style="padding:14px">No quilting jobs in this range.</p>`;
@@ -2755,24 +2781,25 @@ function renderQuilting(){
   const fab=DB.quiltJobs.reduce((s,j)=>s+(+j.fabM||0),0);
   const rcv=DB.quiltJobs.reduce((s,j)=>s+quiltRecv(j),0);
   const k=[["Open jobs",open],["Closed",DB.quiltJobs.filter(j=>j.status==='received').length],
-    ["Fabric issued (m)",fmt(fab,1)],["Received so far (m)",fmt(rcv,1)]];
+    ["Fabric issued (m)",fmt(fab,1)],["Quilted received (m)",fmt(rcv,1)],["Returned unquilted (m)",fmt(DB.quiltJobs.reduce((s,j)=>s+quiltRetFab(j),0),1)]];
   document.getElementById('quiltKpis').innerHTML=k.map(([l,v])=>`<div class="kpi"><div class="v">${v}</div><div class="l">${l}</div></div>`).join('');
   const jl=DB.quiltJobs.slice().reverse();
   document.getElementById('quiltList').innerHTML= jl.length?`<table class="oneline"><thead><tr>
-    <th>Job #</th><th>Quilter</th><th>Fabric</th><th class="num">Issued (m)</th><th class="num">Received (m)</th><th class="num">Remaining</th><th>Lots</th><th>Status</th><th class="noprint"></th>
-    </tr></thead><tbody>`+jl.map(j=>{const rc=quiltRecv(j);const rem=(+j.fabM||0)-rc;
-      const st=j.status==='received'?'CLOSED':(rc>0?'PARTIAL':'ISSUED');
+    <th>Job #</th><th>Quilter</th><th>Fabric</th><th class="num">Issued (m)</th><th class="num">Quilted (m)</th><th class="num">Returned (m)</th><th class="num">Pending</th><th>Lots</th><th>Status</th><th class="noprint"></th>
+    </tr></thead><tbody>`+jl.map(j=>{const rc=quiltRecv(j);const rem=quiltPending(j), rt=quiltRetFab(j);
+      const st=quiltStatusTxt(j);
       return `<tr>
       <td><b>${j.no}</b><div class="tag">${j.date||''}</div></td><td>${j.quilter||'-'}</td>
       <td>${(j.sets&&j.sets.length>1)?('<b>'+j.sets.length+' sets</b> · '):''}${j.fabric||'-'}<div class="tag">${j.foam||''} ${j.foamM?('· '+fmt(j.foamM,1)+'m foam'):''}</div></td>
       <td class="num">${j.fabM||'-'}</td>
       <td class="num"><b>${fmt(rc,1)}</b></td>
+      <td class="num">${rt?fmt(rt,1):'-'}</td>
       <td class="num">${j.status==='received'?'—':fmt(rem,1)}</td>
       <td>${(j.receipts||[]).length}</td>
       <td><span class="pill ${st==='CLOSED'?'ok':st==='PARTIAL'?'low':'low'}">${st}</span></td>
       <td class="num noprint"><button class="btn ghost sm" onclick='printQuilt(${JSON.stringify(j.id)})'>Print</button>
-        ${j.status!=='received'?` <button class="btn g sm" onclick='addReceipt(${JSON.stringify(j.id)})'>+ Receipt</button>
-          <button class="btn ghost sm" onclick='closeQuilt(${JSON.stringify(j.id)})'>Close</button>`:''}
+        ${j.status!=='received'?` <button class="btn g sm" onclick='addReceipt(${JSON.stringify(j.id)})'>+ Receive / return</button>
+          <button class="btn ghost sm" onclick='closeQuilt(${JSON.stringify(j.id)})'>Close</button>`:(isAdmin()?` <button class="btn ghost sm" title="Re-open this job" onclick='reopenQuilt(${JSON.stringify(j.id)})'>↺</button>`:'')}
         <button class="btn ghost sm" onclick='editQuilt(${JSON.stringify(j.id)})'>Edit</button> ${delBtn('quilt',j)}</td></tr>`;}).join('')
     +`</tbody></table>`:`<p class="muted small">No quilting jobs yet.</p>`;
 }
@@ -2832,35 +2859,94 @@ function commitQuilt(id){
   else{o.id=uid();o.status='issued';o.receipts=[];o.createdAt=new Date().toISOString();DB.quiltJobs.push(o);DB.quiltSeq++;}
   save();closeModal();renderQuiltTab();toast(`Quilting job ${id?'updated':'created'}`);
 }
-function addReceipt(id){
-  const j=DB.quiltJobs.find(x=>x.id===id); const rc=quiltRecv(j); const rem=(+j.fabM||0)-rc;
-  const lots=(j.receipts||[]).map((r,i)=>`<tr><td>Lot ${i+1}</td><td>${r.date||''}</td><td class="num">${fmt(r.recvM,1)} m</td>
-    <td>${r.notes||''}</td><td class="num noprint"><button class="btn danger ghost sm" onclick='delReceipt(${JSON.stringify(id)},${i})'>✕</button></td></tr>`).join('');
-  openModal(`<div class="row"><b style="font-size:16px">Receive lot · ${j.no}</b><div class="spacer"></div>
+function addReceipt(id,closing){
+  const j=DB.quiltJobs.find(x=>x.id===id); if(!j)return;
+  const rc=quiltRecv(j), rt=quiltRetFab(j), rem=quiltPending(j), sets=quiltSets(j), left=quiltSetLeft(j);
+  const hist=[...(j.receipts||[]).map((r,i)=>({k:'lot',i,date:r.date,txt:`Quilted received <b>${fmt(r.recvM,1)} m</b>`,notes:r.notes})),
+    ...(j.returns||[]).map((r,i)=>({k:'ret',i,date:r.date,txt:`↩ Returned unquilted — fabric <b>${fmt(r.fabM,1)} m</b> · foam <b>${fmt(r.foamM,1)} m</b>`,notes:r.notes}))]
+    .sort((a,b)=>(a.date||'').localeCompare(b.date||''));
+  openModal(`<div class="row"><b style="font-size:16px">${closing?'Close':'Receive / return'} · ${escH(j.no)}</b><div class="spacer"></div>
       <button class="btn ghost sm" onclick="closeModal()">Cancel</button></div>
-    <div class="banner info" style="display:block">Issued ${j.fabM}m ${j.fabric}. Received so far <b>${fmt(rc,1)}m</b> · Remaining <b>${fmt(rem,1)}m</b>. The quilter sends in lots — record each lot as it arrives.</div>
-    ${lots?`<table style="margin-bottom:12px"><thead><tr><th>Lot</th><th>Date</th><th class="num">Qty</th><th>Notes</th><th class="noprint"></th></tr></thead><tbody>${lots}</tbody></table>`:''}
-    <div class="grid g2">
-      <div><label class="f">This lot — quilted fabric received (m)</label><input id="lotM" type="number"></div>
-      <div><label class="f">Date received</label><input id="lotDate" type="date" value="${new Date().toISOString().slice(0,10)}"></div>
-      <div style="grid-column:1/3"><label class="f">Lot notes</label><input id="lotNotes"></div>
+    <div class="banner info" style="display:block">Issued <b>${fmt(quiltIssued(j),1)} m</b> fabric + <b>${fmt(quiltFoamTotal(j),1)} m</b> foam to ${escH(j.quilter||'')}.
+      Quilted received <b>${fmt(rc,1)} m</b>${rt?` · returned unquilted <b>${fmt(rt,1)} m</b>`:''} · <b>still with quilter ${fmt(rem,1)} m</b>.</div>
+    ${hist.length?`<table style="margin:10px 0"><thead><tr><th>Date</th><th>Entry</th><th>Notes</th><th class="noprint"></th></tr></thead><tbody>${hist.map(h=>`<tr><td>${dmy(h.date)}</td><td>${h.txt}</td><td>${escH(h.notes||'')}</td>
+      <td class="num noprint"><button class="btn danger ghost sm" onclick='${h.k==='lot'?'delReceipt':'delReturn'}(${JSON.stringify(id)},${h.i})'>✕</button></td></tr>`).join('')}</tbody></table>`:''}
+    <div class="grid g2" style="margin-top:10px">
+      <div><label class="f">Quilted fabric received now (m)</label><input id="lotM" type="number" min="0" step="0.1" ${closing?'value="0"':''} oninput='qrCheck(${JSON.stringify(id)})'></div>
+      <div><label class="f">Date</label><input id="lotDate" type="date" value="${today()}"></div>
     </div>
-    <div class="row"><div class="spacer"></div><button class="btn g" onclick='saveReceipt(${JSON.stringify(id)})'>Add lot</button></div>`);
+    <div class="pbox-in">
+      <label class="row" style="gap:6px;cursor:pointer;font-weight:700"><input type="checkbox" id="retOn" style="width:auto" ${closing?'checked':''} onchange='qrToggleRet(this.checked,${JSON.stringify(id)})'>
+        ↩ Fabric / foam returned WITHOUT quilting (stock comes back to us)</label>
+      <div id="retBox" style="display:${closing?'':'none'};margin-top:8px">
+        <table><thead><tr><th>Set</th><th>Fabric</th><th class="num">Fabric returned (m)</th><th>Quilting foam</th><th class="num">Foam returned (m)</th></tr></thead><tbody>
+        ${sets.map((x,i)=>`<tr><td>${i+1}</td><td>${escH(x.fabric||'-')}</td>
+          <td class="num"><input type="number" min="0" step="0.1" class="retFab" data-i="${i}" style="max-width:110px;text-align:right" value="${closing?left[i].fab:''}" oninput='qrCheck(${JSON.stringify(id)})'><div class="tag">with quilter ≈ ${fmt(left[i].fab,1)}</div></td>
+          <td>${escH(x.foam||'-')}</td>
+          <td class="num"><input type="number" min="0" step="0.1" class="retFoam" data-i="${i}" style="max-width:110px;text-align:right" value="${closing?left[i].foam:''}"><div class="tag">with quilter ≈ ${fmt(left[i].foam,1)}</div></td></tr>`).join('')}
+        </tbody></table>
+        <button class="btn ghost sm" style="margin-top:6px" onclick='qrFillAll(${JSON.stringify(id)})'>Fill: everything not quilted is returned</button>
+      </div>
+    </div>
+    <div class="grid g2" style="margin-top:10px"><div style="grid-column:1/3"><label class="f">Notes</label><input id="lotNotes" placeholder="lot no, DC no, reason for return…"></div></div>
+    <div class="banner" id="qrMsg" style="margin-top:10px"></div>
+    <div class="row" style="margin-top:10px">
+      <label class="row" style="gap:6px;cursor:pointer;font-weight:700"><input type="checkbox" id="qrClose" style="width:auto" ${closing?'checked':''}> ✔ Close this quilting job after saving (bill settled)</label>
+      <div class="spacer"></div>
+      ${closing?`<button class="btn ghost" onclick='closeQuiltShort(${JSON.stringify(id)})'>Close without return (record shortage)</button>`:''}
+      <button class="btn g" onclick='saveReceipt(${JSON.stringify(id)})'>Save</button></div>`);
+  qrCheck(id);
 }
+function qrToggleRet(on,id){document.getElementById('retBox').style.display=on?'':'none';qrCheck(id);}
+function qrVals(){
+  const n=x=>{const v=+x.value;return v>0?+v.toFixed(2):0;};
+  const on=document.getElementById('retOn').checked;
+  const sets=[...document.querySelectorAll('.retFab')].map(e=>({fabM:on?n(e):0,foamM:on?n(document.querySelector(`.retFoam[data-i="${e.dataset.i}"]`)):0}));
+  return {q:+(+document.getElementById('lotM').value||0).toFixed(2),sets,fab:sets.reduce((a,x)=>a+x.fabM,0),foam:sets.reduce((a,x)=>a+x.foamM,0)};
+}
+function qrCheck(id){
+  const j=DB.quiltJobs.find(x=>x.id===id); if(!j)return; const v=qrVals(), b=document.getElementById('qrMsg'), cl=document.getElementById('qrClose');
+  const after=+(quiltPending(j)-v.q-v.fab).toFixed(2);
+  if(!v.q&&!v.fab&&!v.foam){b.className='banner';b.innerHTML='';return;}
+  if(after<-0.05){b.className='banner err';b.innerHTML=`⚠ This is ${fmt(-after,1)} m more than what is still with the quilter.`;}
+  else{b.className='banner info';b.innerHTML=after<=0.05?'✓ After this entry nothing is left with the quilter — the job can be closed.':`After this entry <b>${fmt(after,1)} m</b> will still be with the quilter.`;
+    if(after<=0.05&&cl)cl.checked=true;}
+}
+function qrFillAll(id){const j=DB.quiltJobs.find(x=>x.id===id); const left=quiltSetLeft(j), q=+document.getElementById('lotM').value||0, iss=quiltIssued(j)||1;
+  document.querySelectorAll('.retFab').forEach(e=>{const i=+e.dataset.i, x=quiltSets(j)[i], share=q*(+x.fabM||0)/iss, ratio=(+x.fabM||0)?(+x.foamM||0)/(+x.fabM):1;
+    e.value=Math.max(0,+(left[i].fab-share).toFixed(2));
+    const f=document.querySelector(`.retFoam[data-i="${i}"]`); if(f)f.value=Math.max(0,+(left[i].foam-share*ratio).toFixed(2));});
+  qrCheck(id);}
 function saveReceipt(id){
-  const j=DB.quiltJobs.find(x=>x.id===id);
-  const m=+document.getElementById('lotM').value||0;
-  if(!(m>0)){alert("Enter this lot's received metres.");return;}
-  j.receipts=j.receipts||[];
-  j.receipts.push({date:document.getElementById('lotDate').value,recvM:m,notes:document.getElementById('lotNotes').value});
-  if(j.status==='issued')j.status='partial';
-  save();closeModal();renderQuiltTab();toast('Received lot saved');
+  const j=DB.quiltJobs.find(x=>x.id===id); if(!j)return;
+  const v=qrVals(), date=document.getElementById('lotDate').value||today(), notes=document.getElementById('lotNotes').value.trim(), close=document.getElementById('qrClose').checked;
+  if(!v.q&&!v.fab&&!v.foam&&!close){alert('Enter the quilted metres received, or the fabric / foam returned without quilting.');return;}
+  const after=quiltPending(j)-v.q-v.fab;
+  if(after<-0.05&&!confirm(`This adds up to ${fmt(-after,1)} m more than what is still with the quilter. Save anyway?`))return;
+  if(close&&after>0.05&&!confirm(`${fmt(after,1)} m will still be unaccounted for. Close the job anyway (recorded as shortage)?`))return;
+  const by=CURRENT_USER?CURRENT_USER.name:'', parts=[];
+  if(v.q){j.receipts=j.receipts||[];j.receipts.push({date,recvM:v.q,notes,by,at:nowISO()});parts.push(`${fmt(v.q,1)} m quilted received`);}
+  if(v.fab||v.foam){j.returns=j.returns||[];j.returns.push({date,fabM:+v.fab.toFixed(2),foamM:+v.foam.toFixed(2),sets:v.sets,notes,by,at:nowISO()});
+    parts.push(`${fmt(v.fab,1)} m fabric + ${fmt(v.foam,1)} m foam returned unquilted`);}
+  if(j.status==='issued'&&(v.q||v.fab||v.foam))j.status='partial';
+  if(close){j.status='received';j.closedAt=nowISO();j.closedBy=by;parts.push('job closed');}
+  if(j.receipts&&j.receipts.length||j.returns&&j.returns.length)logEdit(j);
+  save();closeModal();renderQuiltTab();toast(`${j.no}: ${parts.join(' · ')}`);
 }
-function delReceipt(id,i){const j=DB.quiltJobs.find(x=>x.id===id);j.receipts.splice(i,1);logEdit(j);
-  if(!j.receipts.length&&j.status==='partial')j.status='issued';save();addReceipt(id);}
-function closeQuilt(id){const j=DB.quiltJobs.find(x=>x.id===id);
-  if(confirm(`Close job ${j.no}? Received ${fmt(quiltRecv(j),1)}m of ${j.fabM}m issued. No more lots can be added.`)){
-    j.status='received';save();renderQuiltTab();toast(`Quilting job ${j.no} closed`);}}
+function delReturn(id,i){const j=DB.quiltJobs.find(x=>x.id===id); if(!j||!confirm('Delete this return entry?'))return;
+  j.returns.splice(i,1);logEdit(j);if(!(j.receipts||[]).length&&!j.returns.length&&j.status==='partial')j.status='issued';save();addReceipt(id);toast('Return entry deleted','info');}
+function closeQuiltShort(id){const j=DB.quiltJobs.find(x=>x.id===id);
+  if(!confirm(`Close ${j.no} with ${fmt(quiltPending(j),1)} m not returned? It will show as a shortage.`))return;
+  j.status='received';j.closedAt=nowISO();j.closedBy=CURRENT_USER?CURRENT_USER.name:'';save();closeModal();renderQuiltTab();toast(`Quilting job ${j.no} closed`);}
+function reopenQuilt(id){const j=DB.quiltJobs.find(x=>x.id===id); if(!j||!confirm(`Re-open quilting job ${j.no}?`))return;
+  j.status=(j.receipts||[]).length||(j.returns||[]).length?'partial':'issued';logEdit(j);save();renderQuiltTab();toast(`Quilting job ${j.no} re-opened`);}
+function delReceipt(id,i){const j=DB.quiltJobs.find(x=>x.id===id); if(!confirm('Delete this received lot?'))return; j.receipts.splice(i,1);logEdit(j);
+  if(!j.receipts.length&&!(j.returns||[]).length&&j.status==='partial')j.status='issued';save();addReceipt(id);toast('Lot deleted','info');}
+function closeQuilt(id){const j=DB.quiltJobs.find(x=>x.id===id); if(!j)return;
+  if(quiltPending(j)<=0.05){if(confirm(`Close job ${j.no}? Quilted ${fmt(quiltRecv(j),1)} m${quiltRetFab(j)?` + returned ${fmt(quiltRetFab(j),1)} m`:''} of ${fmt(quiltIssued(j),1)} m issued.`)){
+    j.status='received';j.closedAt=nowISO();j.closedBy=CURRENT_USER?CURRENT_USER.name:'';save();renderQuiltTab();toast(`Quilting job ${j.no} closed`);}return;}
+  addReceipt(id,true);
+}
 function buildQuiltSheet(j){
   return `<div class="wo-sheet">
     <div class="h"><div><div class="t">QUILTING JOB ORDER</div><div class="tag">to ${j.quilter||''}</div></div>
@@ -2868,7 +2954,7 @@ function buildQuiltSheet(j){
     <div class="meta"><div><div class="lbl">Quilter</div><div class="val">${j.quilter||''}</div></div>
       <div><div class="lbl">Date issued</div><div class="val">${j.date||''}</div></div>
       <div><div class="lbl">Status</div><div class="val">${j.status==='received'?'Received':'Issued'}</div></div>
-      <div style="border-right:none"><div class="lbl">Received</div><div class="val">${fmt(quiltRecv(j),1)} / ${j.fabM||0} m</div></div></div>
+      <div style="border-right:none"><div class="lbl">Quilted / returned / issued</div><div class="val">${fmt(quiltRecv(j),1)} / ${fmt(quiltRetFab(j),1)} / ${j.fabM||0} m</div></div></div>
     <h4>MATERIALS SENT — PRODUCT SETS</h4>
     <table><thead><tr><th>Set</th><th>Fabric</th><th class="num">Fabric (m)</th><th>Quilting foam</th><th class="num">Foam (m)</th></tr></thead><tbody>
       ${quiltSets(j).map((s,i)=>`<tr><td>${i+1}</td><td>${s.fabric||'-'}</td><td class="num">${s.fabM||0}</td><td>${s.foam||'-'}</td><td class="num">${s.foamM||0}</td></tr>`).join('')}
@@ -2880,7 +2966,11 @@ function buildQuiltSheet(j){
       +`<tr><td colspan="2"><b>Total</b></td><td class="num"><b>${fmt(quiltRecv(j),1)}</b></td><td></td></tr>`)
       :`<tr><td>—</td><td>____</td><td class="num">____</td><td></td></tr>`}
     </tbody></table>
-    <div style="padding:10px 14px" class="tag">Status: ${j.status==='received'?'Closed':'Open'} ${j.notes?(' · '+j.notes):''}</div>
+    ${(j.returns||[]).length?`<h4>RETURNED WITHOUT QUILTING</h4>
+    <table><thead><tr><th>Date</th><th class="num">Fabric (m)</th><th class="num">Foam (m)</th><th>Notes</th></tr></thead><tbody>
+    ${j.returns.map(r=>`<tr><td>${r.date||''}</td><td class="num">${fmt(r.fabM,1)}</td><td class="num">${fmt(r.foamM,1)}</td><td>${escH(r.notes||'')}</td></tr>`).join('')}
+    <tr><td><b>Total</b></td><td class="num"><b>${fmt(quiltRetFab(j),1)}</b></td><td class="num"><b>${fmt(quiltRetFoam(j),1)}</b></td><td></td></tr></tbody></table>`:''}
+    <div style="padding:10px 14px" class="tag">Status: ${j.status==='received'?'Closed':'Open'} · still with quilter ${fmt(quiltPending(j),1)} m${j.notes?(' · '+escH(j.notes)):''}</div>
   </div>`;
 }
 function printQuilt(id){docPDF('quilt',id);}
@@ -2971,7 +3061,7 @@ function pdfCutLegacy(c){
 function pdfQuilt(j){
   const doc=jpdf(); if(!doc)return doc;
   pdfHeader(doc,'QUILTING ORDER','JOB #',j.no);
-  let y=metaGrid(doc,[['Quilter',j.quilter],['Date',j.date],['Status',j.status==='received'?'Closed':'Open'],['Received',fmt(quiltRecv(j),1)+'/'+(j.fabM||0)+'m']],90);
+  let y=metaGrid(doc,[['Quilter',j.quilter],['Date',j.date],['Status',j.status==='received'?'Closed':'Open'],['Quilted / returned',fmt(quiltRecv(j),1)+' / '+fmt(quiltRetFab(j),1)+' of '+(j.fabM||0)+'m']],90);
   const qsets=quiltSets(j);
   doc.autoTable({startY:y+6,head:[['Set','Fabric','Fabric (m)','Quilting foam','Foam (m)']],
     body:qsets.map((s,i)=>[i+1,s.fabric||'-',s.fabM||0,s.foam||'-',s.foamM||0])
@@ -2980,6 +3070,8 @@ function pdfQuilt(j){
   doc.autoTable({startY:doc.lastAutoTable.finalY+14,head:[['Lot','Date','Received (m)','Notes']],
     body:(j.receipts||[]).length?j.receipts.map((r,i)=>[i+1,r.date||'',fmt(r.recvM,1),r.notes||''])
       .concat([['','Total',fmt(quiltRecv(j),1),'']]):[['—','____','____','']],...tableStyle});
+  if((j.returns||[]).length)doc.autoTable({startY:doc.lastAutoTable.finalY+14,head:[['Returned unquilted','Fabric (m)','Foam (m)','Notes']],
+    body:j.returns.map(r=>[r.date||'',fmt(r.fabM,1),fmt(r.foamM,1),r.notes||'']).concat([['Total',fmt(quiltRetFab(j),1),fmt(quiltRetFoam(j),1),'']]),...tableStyle});
   return doc;
 }
 function pdfFor(type,rec){return type==='wo'?pdfWorkOrder(rec):type==='cut'?pdfCut(rec):pdfQuilt(rec);}
@@ -3001,8 +3093,8 @@ function exportExcel(type){
         r?fmt(ct,3):'',r&&r.blockCFT?fmt(100*ct/r.blockCFT,1):'',r&&mm?fmt(r.defL,2):'',r&&mm?fmt(r.defW,2):'',r&&mm?fmt(r.defH,1):'',r?(r.notes||''):'',c.edited?'YES':'',c.status,
         c.v===3?c.blocks.map(b=>`${b.L}×${b.W}×${b.H}`).join('; '):'',
         r&&c.v===3?r.sheets.map(x=>`${x.count}× ${x.L}×${x.W}×${x.thk}mm`).join('; '):'']);});
-  } else {rows.push(['Job #','Date','Quilter','Fabric','Fabric m','Quilting foam','Foam m','Received m','Lots','Status']);
-    DB.quiltJobs.forEach(j=>rows.push([j.no,j.date,j.quilter,j.fabric,j.fabM,j.foam,j.foamM,fmt(quiltRecv(j),1),(j.receipts||[]).length,j.status]));}
+  } else {rows.push(['Job #','Date','Quilter','Fabric','Fabric m','Quilting foam','Foam m','Quilted received m','Returned fabric m','Returned foam m','Pending m','Lots','Status']);
+    DB.quiltJobs.forEach(j=>rows.push([j.no,j.date,j.quilter,j.fabric,j.fabM,j.foam,j.foamM,fmt(quiltRecv(j),1),fmt(quiltRetFab(j),1),fmt(quiltRetFoam(j),1),fmt(quiltPending(j),1),(j.receipts||[]).length,j.status]));}
   const html='<table>'+rows.map(r=>'<tr>'+r.map(c=>`<td>${(c==null?'':String(c)).replace(/&/g,'&amp;').replace(/</g,'&lt;')}</td>`).join('')+'</tr>').join('')+'</table>';
   const blob=new Blob(['﻿<html xmlns:x="urn:schemas-microsoft-com:office:excel"><head><meta charset="utf-8"></head><body>'+html+'</body></html>'],{type:'application/vnd.ms-excel'});
   const a=document.createElement('a');a.href=URL.createObjectURL(blob);
@@ -4329,46 +4421,60 @@ function commitPS(id){
   if(CURRENT_VIEW==='wo')renderWO(); else if(CURRENT_VIEW==='dispatch')renderDispatch();
   if(pr)printPS(p.id);
 }
-function psSlipHTML(p,copy){
+function psSlipHTML(p){
   const tot=psQty(p);
-  return `<div class="wo-sheet" style="page-break-after:always;margin-bottom:12px">
-    <div class="h"><div><div class="t">PACKING SLIP</div><div class="tag">${escH(companyName())} · ${copy}</div></div>
-      <div style="text-align:right"><div class="tag">SLIP #</div><div class="t">${escH(p.no)}</div><div class="tag">${dmy(p.date)}</div></div></div>
-    <div class="meta">
-      <div style="grid-column:span 2"><div class="lbl">Customer</div><div class="val">${escH(p.cust)}</div><div class="tag">${escH([p.address,p.city].filter(Boolean).join(', '))}${p.phone?' · ☎ '+escH(p.phone):''}</div></div>
-      <div><div class="lbl">Agent</div><div class="val">${escH(p.agent||'-')}</div></div>
-      <div style="border-right:none"><div class="lbl">Total pieces</div><div class="val">${tot}</div></div>
-      <div><div class="lbl">Vehicle</div><div class="val">${escH(p.vehicle||'-')}</div></div>
-      <div><div class="lbl">Driver</div><div class="val">${escH(p.driver||'-')}</div></div>
-      <div><div class="lbl">Transporter</div><div class="val">${escH(p.transporter||'-')}</div></div>
-      <div style="border-right:none"><div class="lbl">LR / Docket</div><div class="val">${escH(p.lr||'-')}</div></div>
-    </div>
-    <table><thead><tr><th style="text-align:left">#</th><th style="text-align:left">WO #</th><th style="text-align:left">Product</th><th style="text-align:center">Size (L×B×H in)</th><th style="text-align:center">Qty</th></tr></thead><tbody>
-      ${p.lines.map((l,i)=>`<tr><td style="text-align:left">${i+1}</td><td style="text-align:left">${escH(l.woNum)}</td><td style="text-align:left">${escH(l.brand)} ${escH(l.model)}</td><td style="text-align:center">${l.L} × ${l.W} × ${l.H}</td><td style="text-align:center"><b>${l.qty}</b></td></tr>`).join('')}
-      <tr><td></td><td></td><td style="text-align:left"><b>Total</b></td><td></td><td style="text-align:center"><b>${tot}</b></td></tr></tbody></table>
-    ${p.remarks?`<div style="padding:10px 14px" class="tag"><b>Remarks:</b> ${escH(p.remarks)}</div>`:''}
-    <div style="display:flex;justify-content:space-between;padding:34px 14px 14px;font-size:12px"><span>Packed by: ${escH(p.by||'')}</span><span>Driver signature</span><span>Received in good condition</span></div>
+  const rows=(p.lines||[]).map((l,i)=>{const w=woById(l.woId)||{}, g=k=>l[k]!=null?l[k]:(w[k]!=null?w[k]:'-');
+    return `<tr><td class="n">${i+1}</td><td>${escH(l.woNum||w.num||'-')}</td><td>${escH(g('brand'))} ${escH(g('model'))}</td><td class="n">${g('L')} × ${g('W')} × ${g('H')}</td><td class="n"><b>${l.qty}</b></td></tr>`;}).join('');
+  return `<div class="ps">
+    <div class="psh"><div><div class="t">PACKING SLIP</div><div style="font-size:11px;color:#555">${escH(companyName())}</div></div>
+      <div style="text-align:right"><div class="lb">Slip #</div><div class="t">${escH(p.no)}</div><div style="font-size:11px">${dmy(p.date)}</div></div></div>
+    <div class="psm">
+      <div><div class="lb">Customer</div><div class="v">${escH(p.cust||'-')}</div><div style="font-size:11px;color:#444">${escH([p.address,p.city].filter(Boolean).join(', '))}${p.phone?' · ☎ '+escH(p.phone):''}</div></div>
+      <div><div class="lb">Agent</div><div class="v">${escH(p.agent||'-')}</div></div>
+      <div><div class="lb">Total pieces</div><div class="v">${tot}</div></div></div>
+    <div class="psr">
+      <div><div class="lb">Vehicle</div><div class="v">${escH(p.vehicle||'-')}</div></div>
+      <div><div class="lb">Driver</div><div class="v">${escH(p.driver||'-')}</div></div>
+      <div><div class="lb">Transporter</div><div class="v">${escH(p.transporter||'-')}</div></div>
+      <div><div class="lb">LR / Docket</div><div class="v">${escH(p.lr||'-')}</div></div></div>
+    <table><thead><tr><th class="n" style="width:34px">#</th><th style="width:90px">WO #</th><th>Product</th><th class="n" style="width:150px">Size (L × B × H in)</th><th class="n" style="width:50px">Qty</th></tr></thead>
+      <tbody>${rows}<tr class="tot"><td></td><td></td><td>Total</td><td></td><td class="n">${tot}</td></tr></tbody></table>
+    ${p.remarks?`<div style="padding:8px 12px;font-size:11px;border-top:1px solid #ccc"><b>Remarks:</b> ${escH(p.remarks)}</div>`:''}
+    <div class="pss"><span>Packed by: ${escH(p.by||'')}</span><span>Driver signature</span><span>Received in good condition</span></div>
   </div>`;
 }
-
 /* ---- downloads: packing slip as PDF, invoice PDF file ---- */
 function psPDF(id){const p=psById(id); if(!p)return; const doc=jpdf(); if(!doc)return;
-  const W=doc.internal.pageSize.getWidth(), M=36, cl=x=>String(x==null?'':x).replace(/[—–]/g,'-').replace(/×/g,'x').replace(/[^\x20-\x7E\n]/g,'');
-  doc.setFont('helvetica','bold');doc.setFontSize(16);doc.text('PACKING SLIP',M,46);
-  doc.setFont('helvetica','normal');doc.setFontSize(9);doc.text(cl(companyName()),M,60);
-  doc.setFont('helvetica','bold');doc.setFontSize(13);doc.text(cl(p.no),W-M,46,{align:'right'});
-  doc.setFont('helvetica','normal');doc.setFontSize(9);doc.text('Date '+dmy(p.date),W-M,60,{align:'right'});
-  doc.setDrawColor(200);doc.line(M,70,W-M,70);
-  const meta=[['Customer',[p.cust,[p.address,p.city].filter(Boolean).join(', '),p.phone?'Ph '+p.phone:''].filter(Boolean).join('\n')],['Agent',p.agent||'-'],
-    ['Vehicle',p.vehicle||'-'],['Driver',p.driver||'-'],['Transporter',p.transporter||'-'],['LR / Docket',p.lr||'-'],['Total pieces',String(psQty(p))]];
-  doc.autoTable({startY:80,margin:{left:M,right:M},theme:'plain',styles:{fontSize:9,cellPadding:3},body:meta.map(([a,b])=>[a,cl(b)]),columnStyles:{0:{fontStyle:'bold',cellWidth:90}}});
-  doc.autoTable({startY:doc.lastAutoTable.finalY+8,margin:{left:M,right:M},theme:'grid',styles:{fontSize:9,cellPadding:4},headStyles:{fillColor:[30,64,124]},
-    head:[['#','WO #','Product','Size (L x B x H in)','Qty']],
-    body:p.lines.map((l,i)=>{const w=woById(l.woId)||{}, g=k=>l[k]!=null?l[k]:(w[k]!=null?w[k]:'-');return [i+1,cl(g('woNum')!=='-'?g('woNum'):w.num||'-'),cl(`${g('brand')} ${g('model')}`),`${g('L')} x ${g('W')} x ${g('H')}`,l.qty];}).concat([['','','Total','',psQty(p)]]),
-    columnStyles:{4:{halign:'right',cellWidth:40},3:{halign:'center'}},didParseCell:d=>{if(d.section==='body'&&d.row.index===p.lines.length)d.cell.styles.fontStyle='bold';}});
-  let y=doc.lastAutoTable.finalY+14;
-  if(p.remarks){doc.setFontSize(9);const r=doc.splitTextToSize(cl('Remarks: '+p.remarks),W-2*M);doc.text(r,M,y);y+=r.length*11+6;}
-  y+=30;doc.setFontSize(9);doc.text('Packed by: '+cl(p.by||''),M,y);doc.text('Driver signature',W/2,y,{align:'center'});doc.text('Received in good condition',W-M,y,{align:'right'});
+  const W=doc.internal.pageSize.getWidth(), H=doc.internal.pageSize.getHeight(), M=30, cl=x=>String(x==null?'':x).replace(/[—–]/g,'-').replace(/×/g,'x').replace(/[^\x20-\x7E\n]/g,'');
+  doc.setDrawColor(40);doc.setLineWidth(1);
+  doc.setFont('helvetica','bold');doc.setFontSize(18);doc.text('PACKING SLIP',M,44);
+  doc.setFont('helvetica','normal');doc.setFontSize(9);doc.setTextColor(90);doc.text(cl(companyName()),M,57);doc.setTextColor(0);
+  doc.setFontSize(8);doc.setTextColor(110);doc.text('SLIP #',W-M,32,{align:'right'});doc.setTextColor(0);
+  doc.setFont('helvetica','bold');doc.setFontSize(16);doc.text(cl(p.no),W-M,48,{align:'right'});
+  doc.setFont('helvetica','normal');doc.setFontSize(9);doc.text(dmy(p.date),W-M,60,{align:'right'});
+  doc.line(M,68,W-M,68);
+  const cell=(x,y,w,lab,val,big)=>{doc.setFontSize(7);doc.setTextColor(110);doc.text(lab.toUpperCase(),x+6,y+10);doc.setTextColor(0);
+    doc.setFont('helvetica','bold');doc.setFontSize(big?11:10);const t=doc.splitTextToSize(cl(val||'-'),w-12);doc.text(t.slice(0,2),x+6,y+23);doc.setFont('helvetica','normal');};
+  const cw=(W-2*M);
+  cell(M,70,cw*0.5,'Customer',p.cust,1);
+  doc.setFontSize(8);doc.setTextColor(70);doc.text(doc.splitTextToSize(cl([[p.address,p.city].filter(Boolean).join(', '),p.phone?'Ph '+p.phone:''].filter(Boolean).join('  |  ')),cw*0.5-12).slice(0,2),M+6,104);doc.setTextColor(0);
+  cell(M+cw*0.5,70,cw*0.25,'Agent',p.agent);cell(M+cw*0.75,70,cw*0.25,'Total pieces',String(psQty(p)),1);
+  doc.line(M,118,W-M,118);
+  ['Vehicle','Driver','Transporter','LR / Docket'].forEach((l,i)=>cell(M+cw*i/4,118,cw/4,l,[p.vehicle,p.driver,p.transporter,p.lr][i]));
+  doc.line(M,150,W-M,150);
+  const body=(p.lines||[]).map((l,i)=>{const w=woById(l.woId)||{}, g=k=>l[k]!=null?l[k]:(w[k]!=null?w[k]:'-');
+    return [i+1,cl(l.woNum||w.num||'-'),cl(`${g('brand')} ${g('model')}`),`${g('L')} x ${g('W')} x ${g('H')}`,l.qty];});
+  doc.autoTable({startY:156,margin:{left:M,right:M},theme:'grid',styles:{fontSize:9,cellPadding:{top:4,bottom:4,left:5,right:5},lineColor:[200,200,200],lineWidth:0.5,textColor:20},
+    headStyles:{fillColor:[235,235,235],textColor:20,fontStyle:'bold',fontSize:8},
+    head:[['#','WO #','Product','Size (L x B x H in)','Qty']],body:body.concat([['','','Total','',psQty(p)]]),
+    columnStyles:{0:{halign:'center',cellWidth:26},1:{cellWidth:62},3:{halign:'center',cellWidth:120},4:{halign:'center',cellWidth:40}},
+    didParseCell:d=>{if(d.section==='body'&&d.row.index===body.length){d.cell.styles.fontStyle='bold';d.cell.styles.fontSize=10;}}});
+  let y=doc.lastAutoTable.finalY+12;
+  if(p.remarks){doc.setFontSize(9);const r=doc.splitTextToSize(cl('Remarks: '+p.remarks),W-2*M);doc.text(r,M,y+4);y+=r.length*11+6;}
+  y=Math.max(y+34,Math.min(H-60,y+34));
+  doc.setFontSize(9);doc.setDrawColor(120);
+  [[M,'Packed by: '+cl(p.by||'')],[W/2-75,'Driver signature'],[W-M-150,'Received in good condition']].forEach(([x,t])=>{doc.line(x,y,x+150,y);doc.text(t,x+75,y+12,{align:'center'});});
+  doc.rect(M-6,20,W-2*M+12,y+22-20);
   doc.save(`${p.no}_${cl(p.cust).replace(/[^A-Za-z0-9]+/g,'_')}.pdf`); toast(`Packing slip ${p.no} downloaded`);
 }
 async function downloadDocFile(id){
@@ -4380,16 +4486,17 @@ async function downloadDocFile(id){
   toast(`Downloading ${d.kind==='invoice'?'invoice':'file'} ${d.docNo||''}`);
 }
 function printPS(id){const p=psById(id); if(!p)return;
-  document.getElementById('printArea').innerHTML=`<style>@page{size:A4;margin:12mm}</style>${psSlipHTML(p,'Customer copy')}${psSlipHTML(p,'Office copy — for invoicing')}`;
+  document.getElementById('printArea').innerHTML=`<style>@page{size:A4;margin:10mm}</style>${psSlipHTML(p)}`;
   setTimeout(()=>window.print(),50);}
 function viewPS(id){const p=psById(id); if(!p)return;
+  document.getElementById('printArea').innerHTML=`<style>@page{size:A4;margin:10mm}</style>${psSlipHTML(p)}`;
   const inv=psInvoices(p);
   openModal(`<div class="row"><b style="font-size:16px">Packing slip ${escH(p.no)}</b><div class="spacer"></div>
       <button class="btn ghost sm" onclick='printPS(${JSON.stringify(id)})'>🖨 Print</button>
       <button class="btn ghost sm" onclick='psPDF(${JSON.stringify(id)})'>⬇ PDF</button>
       ${isSales()?'':`<button class="btn ghost sm" onclick='closeModal();psModal(${JSON.stringify(id)})'>Edit</button>`}
       <button class="btn ghost sm" onclick="closeModal()">Close</button></div>
-    <div style="margin-top:12px">${psSlipHTML(p,'')}</div>
+    <div style="margin-top:12px">${psSlipHTML(p)}</div>
     ${DOCS_OK?`<div class="divider"></div><div class="row"><b>Invoices</b><span class="tag">${inv.length}</span><div class="spacer"></div>
       ${canDocs()?`<button class="btn ghost sm" onclick='uploadDocModal("invoice",${JSON.stringify(id)})'>＋ Upload invoice</button>`:''}</div>
       ${inv.length?`<table class="oneline" style="margin-top:6px"><tbody>${inv.map(d=>`<tr><td><b>${escH(d.docNo)}</b></td><td>${escH(d.docDate||'')}</td>
