@@ -206,7 +206,8 @@
   <div class="card" style="max-width:360px;width:100%;text-align:center">
     <div class="brand" style="font-size:22px;margin-bottom:4px"><span style="color:var(--accent)">◆</span> Manufacturing System</div>
     <div class="sub muted small" style="margin-bottom:16px">Napcat &amp; Orthonap</div>
-    <div style="text-align:left">
+    <div id="loginLoading" style="display:none;padding:18px 0" class="muted"><div style="font-size:15px;font-weight:600;color:var(--txt)">Loading your data…</div><div id="loginLoadingMsg" class="small" style="margin-top:6px">Signing you back in.</div></div>
+    <div style="text-align:left" id="loginForm">
       <label class="f">Username</label>
       <input id="loginUser" autocomplete="off" onkeydown="if(event.key==='Enter')document.getElementById('loginPin').focus()">
       <label class="f" style="margin-top:10px">PIN</label>
@@ -877,30 +878,79 @@ const COLLS=[
   ['products','products', o=>({id:o.id,data:o})],
   ['app_users','users', o=>({id:o.id,data:o})],
 ];
-function metaObj(){return {settings:DB.settings,woSeq:DB.woSeq,blockSeq:DB.blockSeq,cutSeq:DB.cutSeq,quiltSeq:DB.quiltSeq,adminPin:DB.adminPin,flagLog:DB.flagLog,others:DB.others,serialSeq:DB.serialSeq,dispSeq:DB.dispSeq,claimSeq:DB.claimSeq,psSeq:DB.psSeq,soSeq:DB.soSeq};}
+const META_KEYS=['settings','woSeq','blockSeq','cutSeq','quiltSeq','adminPin','flagLog','others','serialSeq','dispSeq','claimSeq','psSeq','soSeq'];
+const SEQ_KEYS=META_KEYS.filter(k=>/Seq$/.test(k));
+let LAST_META=null;
+function metaObj(){const m={};META_KEYS.forEach(k=>m[k]=DB[k]);return m;}
 function setSync(t,cls){const c=document.getElementById('syncChip');if(c){c.textContent=t;c.style.color=cls||'';}}
 
 function uid(){return Math.random().toString(36).slice(2,10)+Date.now().toString(36).slice(-4)}
 function cacheLoad(){try{const s=localStorage.getItem("wo_db");if(s)return ensureDB(JSON.parse(s))}catch(e){}return null;}
-function save(){ try{localStorage.setItem("wo_db",JSON.stringify(DB));}catch(e){} if(CLOUD_OK)scheduleCloudPush(); }
+// The device cache is only a convenience copy (the cloud is the master). If the browser's storage is full
+// (Safari allows ~5 MB) we drop the big lists, and if that still fails we drop the cache, so the login
+// session can always be stored.
+function cacheSave(){
+  try{localStorage.setItem("wo_db",JSON.stringify(DB));return;}catch(e){}
+  try{localStorage.removeItem("wo_db");}catch(e){}
+  try{const slim=Object.assign({},DB,{woDocs:[],priceList:[],serials:[],moves:[],flagLog:[]});localStorage.setItem("wo_db",JSON.stringify(slim));}
+  catch(e){try{localStorage.removeItem("wo_db");}catch(e2){}}
+}
+let LOCAL_REV=0;
+function save(){ LOCAL_REV++; cacheSave(); if(CLOUD_OK)scheduleCloudPush(); }
+function readSession(){let v=null;try{v=localStorage.getItem('wo_session');}catch(e){}
+  if(!v){try{v=sessionStorage.getItem('wo_session');}catch(e){}} return v||null;}
+function writeSession(id){
+  try{sessionStorage.setItem('wo_session',id);}catch(e){}
+  try{localStorage.setItem('wo_session',id);return;}catch(e){}
+  try{localStorage.removeItem('wo_db');localStorage.setItem('wo_session',id);}catch(e){}
+}
+function clearSession(){try{localStorage.removeItem('wo_session');}catch(e){} try{sessionStorage.removeItem('wo_session');}catch(e){}}
 function logEdit(obj){obj.edited=true;obj.editLog=obj.editLog||[];
   obj.editLog.push({at:new Date().toISOString(),by:(CURRENT_USER?CURRENT_USER.name:'?')});}
 function lastEdit(obj){const l=obj.editLog;return l&&l.length?l[l.length-1]:null;}
 
-async function cloudLoad(){
-  const q=t=>sb.from(t).select('data');
-  const [o,c,qq,m,p,u,meta]=await Promise.all([q('orders'),q('cuttings'),q('quilting'),
-    q('materials'),q('products'),q('app_users'),sb.from('meta').select('data').eq('id','singleton')]);
+// Supabase returns at most 1000 rows per request, so read every table in pages.
+async function fetchRows(table){
+  const N=1000; let all=[], from=0;
+  for(;;){const r=await sb.from(table).select('data').order('id').range(from,from+N-1);
+    if(r.error)return {error:r.error};
+    const d=r.data||[]; all=all.concat(d); if(d.length<N)break; from+=N;}
+  return {data:all};
+}
+// Loads all tables. Tables that fail keep the rows we already had (never treated as "deleted").
+async function fetchAll(prev){
+  const core=['orders','cuttings','quilting','materials','products','app_users'];
+  // everything is requested at the same time (faster start-up on slow connections)
+  const corePs=Promise.all([...core.map(fetchRows),sb.from('meta').select('data').eq('id','singleton')]);
+  const erpP=Promise.all(ERP_COLLS.map(([t])=>fetchRows(t))), salesP=Promise.all(SALES_COLLS.map(([t])=>fetchRows(t))), docsP=fetchRows('wo_docs');
+  const [[o,c,qq,m,p,u,meta],erpR,salesR,d]=await Promise.all([corePs,erpP,salesP,docsP]);
   for(const r of [o,c,qq,m,p,u,meta]) if(r.error) throw r.error;
   const rows=res=>(res.data||[]).map(x=>x.data);
   const md=(meta.data&&meta.data[0])?meta.data[0].data:null;
   const empty=!o.data.length&&!c.data.length&&!qq.data.length&&!m.data.length&&!p.data.length&&!u.data.length&&!md;
-  if(empty) return true;
-  DB={orders:rows(o),cuts:rows(c),quiltJobs:rows(qq),materials:rows(m),products:rows(p),users:rows(u),
-    settings:md&&md.settings,woSeq:md&&md.woSeq,blockSeq:md&&md.blockSeq,cutSeq:md&&md.cutSeq,quiltSeq:md&&md.quiltSeq,adminPin:md&&md.adminPin,flagLog:md&&md.flagLog,others:md&&md.others,serialSeq:md&&md.serialSeq,dispSeq:md&&md.dispSeq,claimSeq:md&&md.claimSeq,psSeq:md&&md.psSeq,soSeq:md&&md.soSeq};
-  ensureDB(DB);
-  try{localStorage.setItem("wo_db",JSON.stringify(DB));}catch(e){}
-  return false;
+  if(empty) return {empty:true};
+  const db={orders:rows(o),cuts:rows(c),quiltJobs:rows(qq),materials:rows(m),products:rows(p),users:rows(u)};
+  META_KEYS.forEach(k=>{db[k]=md?md[k]:undefined;});
+  const out={empty:false,db,erpOk:ERP_OK,salesOk:SALES_OK,docsOk:DOCS_OK,lastMeta:md};
+  // tables that fail keep the rows we already had (never treated as "deleted")
+  const opt=(colls,res,flag)=>{
+    if(res.some(r=>r.error)){colls.forEach(([,k])=>db[k]=(prev&&prev[k])||[]);
+      if(!out[flag])console.warn('tables not set up yet',colls.map(x=>x[0]).join(','),res.find(r=>r.error).error);
+      return;}
+    out[flag]=true; colls.forEach(([,k],i)=>db[k]=rows(res[i]));
+  };
+  opt(ERP_COLLS,erpR,'erpOk'); opt(SALES_COLLS,salesR,'salesOk');
+  if(d.error){db.woDocs=(prev&&prev.woDocs)||[];}
+  else{out.docsOk=true;db.woDocs=rows(d).sort((a,b)=>(a.at||'').localeCompare(b.at||''));}
+  ensureDB(db);
+  return out;
+}
+function applyFresh(f){
+  DB=f.db; ERP_OK=f.erpOk; SALES_OK=f.salesOk; DOCS_OK=f.docsOk;
+  if(ERP_OK){ERP_CACHE={};ERP_COLLS.forEach(([,k])=>ERP_CACHE[k]=DB[k]);}
+  if(SALES_OK){SALES_CACHE={};SALES_COLLS.forEach(([,k])=>SALES_CACHE[k]=DB[k]);}
+  LAST_META=f.lastMeta||null;
+  cacheSave();
 }
 function initSnap(){
   SNAP={};
@@ -927,41 +977,87 @@ async function cloudPushDiff(){
     if(dels.length){const{error}=await sb.from(table).delete().in('id',dels);if(error)throw error;}
     SNAP[table]=curMap;
   }
-  const mj=JSON.stringify(state.meta);
-  if(SNAP.meta!==mj){const{error}=await sb.from('meta').upsert({id:'singleton',data:state.meta});if(error)throw error;SNAP.meta=mj;}
+  let mj=JSON.stringify(state.meta);
+  if(SNAP.meta!==mj){
+    const r=await sb.from('meta').select('data').eq('id','singleton');
+    const remote=(!r.error&&r.data&&r.data[0])?r.data[0].data:null;
+    if(remote){
+      SEQ_KEYS.forEach(k=>{const v=Math.max(+state.meta[k]||0,+remote[k]||0); state.meta[k]=v; if((+DB[k]||0)<v)DB[k]=v;});
+      const known=new Set(((LAST_META&&LAST_META.others)||[]).map(x=>x.id));
+      (remote.others||[]).forEach(x=>{if(x&&x.id&&!known.has(x.id)&&!(state.meta.others||[]).some(y=>y.id===x.id)){state.meta.others=(state.meta.others||[]).concat([x]);DB.others.push(x);}});
+      const fk=x=>JSON.stringify([x.type,x.id,x.at]);
+      const knownF=new Set(((LAST_META&&LAST_META.flagLog)||[]).map(fk));
+      (remote.flagLog||[]).forEach(x=>{if(x&&!knownF.has(fk(x))&&!(state.meta.flagLog||[]).some(y=>fk(y)===fk(x))){state.meta.flagLog=(state.meta.flagLog||[]).concat([x]);DB.flagLog.push(x);}});
+      mj=JSON.stringify(state.meta);
+    }
+    const{error}=await sb.from('meta').upsert({id:'singleton',data:state.meta});if(error)throw error;SNAP.meta=JSON.stringify(metaObj());LAST_META=JSON.parse(mj);
+  }
 }
 async function cloudPushAll(){ SNAP={}; await cloudPushDiff(); }
-function startPolling(){ setInterval(async()=>{
-  if(!CLOUD_OK||pushing||dirty)return;
+function startPolling(){ if(window.__polling)return; window.__polling=true; setInterval(pollOnce,15000); }
+let POLL_BUSY=false;
+async function pollOnce(){
+  if(!CLOUD_OK||pushing||dirty||POLL_BUSY)return;
   if((document.getElementById('modal').style.display||'')==='flex')return;
-  try{ const empty=await cloudLoad(); await loadErp(); await loadSales(); await loadDocs(); if(!empty){ initSnap(); refreshView(); } }catch(e){}
-}, 15000); }
+  POLL_BUSY=true; const rev=LOCAL_REV;
+  try{ const f=await fetchAll(DB);
+    if(f.empty||rev!==LOCAL_REV||pushing||dirty)return;          // something changed locally meanwhile — try again next round
+    if((document.getElementById('modal').style.display||'')==='flex')return;
+    applyFresh(f); initSnap(); refreshView();
+  }catch(e){console.warn('poll',e);}
+  finally{POLL_BUSY=false;}
+}
 function refreshView(){
   if(!CURRENT_USER)return;
   const fresh=DB.users.find(u=>u.id===CURRENT_USER.id);
-  if(!fresh){logout();return;}
+  if(!fresh){ if(DB.users.length){toast('Your login was removed by the admin','err');logout();} return; }
   if(fresh.role!==CURRENT_USER.role){CURRENT_USER=fresh;applyRole();toast('Your access was changed by the admin');return;}
   CURRENT_USER=fresh; const v=CURRENT_VIEW;
+  const ae=document.activeElement;
+  if(ae&&/^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName)&&ae.closest('main')&&!/^(cf-|soF|prF|dpF|clF|othQ|cutQ|quiltQ|docF-|woF|stF|lgWO|wlQ)/.test(ae.id||''))return;   // user is typing — refresh next round
+  if(v==='admin'&&ADMIN_SUB==='settings')return;
   if(v==='dash')renderDash(); else if(v==='wo')renderWO(); else if(v==='admin')renderAdmin();
   else if(v==='cutting')renderCutTab(); else if(v==='quilting')renderQuiltTab();
   else if(v==='others')renderOthers();
   else if(v==='stores')renderStores(); else if(v==='dispatch')renderDispatch(); else if(v==='warranty')renderWarranty();
   else if(v==='sales'){ if(SALES_SUB!=='new')renderSales(); }
 }
+function bootScreen(mode,msg){
+  const card=document.getElementById('loginForm'), ld=document.getElementById('loginLoading');
+  if(!card||!ld)return;
+  card.style.display=mode==='form'?'':'none'; ld.style.display=mode==='form'?'none':'';
+  if(msg)document.getElementById('loginLoadingMsg').innerHTML=msg;
+}
 async function boot(){
   setSync('● Connecting…','var(--warn)');
+  const sess=readSession();
+  bootScreen(sess?'loading':'form');
+  let ok=false;
   if(sb){
     try{
-      const empty=await cloudLoad();
-      await loadErp(); await loadSales();
-      if(empty){ DB=ensureDB(sampleDB()); await cloudPushAll(); }
-      else initSnap();
-      CLOUD_OK=true; setSync('● Online','var(--accent2)');
-      await loadDocs();
-    }catch(e){ console.error('cloud',e); CLOUD_OK=false; setSync('● Offline (this device only)','var(--danger)'); }
+      const f=await fetchAll(DB);
+      if(f.empty){ DB=ensureDB(sampleDB()); await cloudPushAll(); const f2=await fetchAll(DB); if(!f2.empty)applyFresh(f2); initSnap(); }
+      else { applyFresh(f); initSnap(); }
+      CLOUD_OK=true; ok=true; setSync('● Online','var(--accent2)');
+    }catch(e){ console.error('cloud',e); CLOUD_OK=false; setSync('● Offline — retrying','var(--danger)'); }
   } else { setSync('● Offline (no internet)','var(--danger)'); }
-  if(!restoreSession()){ const li=document.getElementById('loginUser'); if(li)li.focus(); }
-  if(CLOUD_OK) startPolling();
+  const cached=!!localStorage.getItem&&(()=>{try{return !!localStorage.getItem('wo_db');}catch(e){return false;}})();
+  if(sess&&!ok&&!cached){
+    bootScreen('loading','Can\'t reach the server right now. Retrying… <div style="margin-top:10px"><button class="btn sm" onclick="location.reload()">Retry now</button> <button class="btn ghost sm" onclick="clearSession();bootScreen(\'form\')">Log in again</button></div>');
+    setTimeout(boot,8000); return;
+  }
+  bootScreen('form');
+  try{ if(!restoreSession()){ const li=document.getElementById('loginUser'); if(li)li.focus(); } }catch(e){console.error(e);}
+  if(CLOUD_OK) startPolling(); else setTimeout(reconnect,10000);
+}
+// came up offline (using this device's copy): keep trying, then switch to live data
+async function reconnect(){
+  if(CLOUD_OK||!sb)return;
+  try{ const f=await fetchAll(DB); if(f.empty)throw new Error('empty');
+    const hadEdits=LOCAL_REV>0;
+    applyFresh(f); initSnap(); CLOUD_OK=true; setSync('● Online','var(--accent2)'); startPolling(); refreshView();
+    toast(hadEdits?'Back online — changes made while offline on this device were not saved, please re-check':'Back online',hadEdits?'err':'',6000);
+  }catch(e){ setTimeout(reconnect,10000); }
 }
 function matById(id){return DB.materials.find(m=>m.id===id)}
 
@@ -1027,15 +1123,15 @@ function doLogin(){
   const p=document.getElementById('loginPin').value;
   const user=DB.users.find(x=>x.username.toLowerCase()===u && String(x.pin)===String(p));
   if(!user){document.getElementById('loginErr').textContent='Wrong username or PIN.';return;}
-  CURRENT_USER=user; try{localStorage.setItem('wo_session',user.id);}catch(e){}
+  CURRENT_USER=user; writeSession(user.id);
   document.getElementById('login').style.display='none';
   applyRole(); document.getElementById('loginPin').value='';document.getElementById('loginErr').textContent='';
 }
-function logout(){CURRENT_USER=null; try{closeModal();}catch(e){} try{localStorage.removeItem('wo_session');}catch(e){}
+function logout(){CURRENT_USER=null; try{closeModal();}catch(e){} clearSession();
   document.getElementById('login').style.display='flex';
   document.getElementById('loginUser').value='';document.getElementById('loginUser').focus();}
 function restoreSession(){
-  let uid=null; try{uid=localStorage.getItem('wo_session');}catch(e){}
+  const uid=readSession();
   const user=uid&&DB.users.find(x=>x.id===uid);
   if(user){CURRENT_USER=user;document.getElementById('login').style.display='none';applyRole();return true;}
   return false;
@@ -1204,9 +1300,9 @@ function editUser(id){
   openModal(`<div class="row"><b style="font-size:16px">${id?'Edit':'New'} User</b><div class="spacer"></div>
       <button class="btn ghost sm" onclick="closeModal()">Cancel</button></div>
     <div class="grid g2" style="margin-top:12px">
-      <div><label class="f">Name</label><input id="uName" value="${u.name}"></div>
-      <div><label class="f">Username</label><input id="uUser" value="${u.username}"></div>
-      <div><label class="f">PIN</label><input id="uPin" value="${u.pin}"></div>
+      <div><label class="f">Name</label><input id="uName" value="${escH(u.name)}"></div>
+      <div><label class="f">Username</label><input id="uUser" value="${escH(u.username)}"></div>
+      <div><label class="f">PIN</label><input id="uPin" value="${escH(u.pin)}"></div>
       <div><label class="f">Role</label><select id="uRole">
         <option value="operator" ${u.role==='operator'?'selected':''}>Operator (Workorder, Cutting, Quilting)</option>
         <option value="sales" ${u.role==='sales'?'selected':''}>Sales (Sales Orders only — sees own orders)</option>
@@ -1373,7 +1469,7 @@ function renderAdminDash(){
 
 /* ============================ WORK ORDER ============================ */
 let curProd=null, WOACT=[], editingWO=null, WO_SUB='create';
-function today(){return new Date().toISOString().slice(0,10);}
+function today(){const d=new Date();return new Date(d.getTime()-d.getTimezoneOffset()*6e4).toISOString().slice(0,10);}
 function uniq(arr){return [...new Set(arr.filter(Boolean))];}
 function renderWO(){ showWO(WO_SUB); }
 function showWO(sub){
@@ -1405,7 +1501,7 @@ function initCreateWO(){
   if(!document.getElementById('woItemsBox').contains(ed))renderWOItems();
   if(!WO_PANEL_INIT){WO_PANEL_INIT=true;renderWOSOPanel();}
 }
-function fillDL(id,vals){document.getElementById(id).innerHTML=vals.map(v=>`<option value="${v}">`).join('');}
+function fillDL(id,vals){const e=document.getElementById(id);if(e)e.innerHTML=vals.map(v=>`<option value="${escH(v)}">`).join('');}
 function onBrandChange(){
   const brand=document.getElementById('woBrand').value;
   const mSel=document.getElementById('woModel');
@@ -1518,7 +1614,7 @@ function lineDetailRowsBase(l){
   if(l.subUsed&&l.subUsed!==l.name) return ['Used: '+l.subUsed];
   return l.usageNote?[l.usageNote]:[];
 }
-function lineDetailHTML(l){const r=lineDetailRows(l);return r.length?r.join('<br>'):'—';}
+function lineDetailHTML(l){const r=lineDetailRows(l);return r.length?r.map(escH).join('<br>'):'—';}
 function lineDetailText(l){const r=lineDetailRows(l);return r.length?r.join('\n'):'-';}
 // Which layers were fulfilled with a material different from the product BOM
 function orderSubs(lines){
@@ -1714,6 +1810,7 @@ function woAddItem(pre){stashWOItem();WOITEMS.push(pre||blankWOItem());WOI=WOITE
   const b=document.getElementById('wobox_'+WOI);if(b)b.scrollIntoView({behavior:'smooth',block:'start'});}
 function woRemoveItem(i){
   stashWOItem(); const it=WOITEMS[i];
+  if(editingWO&&it._orig!=null){const ex=DB.orders.find(x=>x.id===editingWO); if(ex&&woItemPacked(ex,it._orig)>0){alert('This product is already on a packing slip, so it can\'t be removed. Delete or edit the packing slip first.');return;}}
   if(!confirm(`Remove product ${i+1} (${woItemTitle(it)}) from this work order?`))return;
   WOITEMS.splice(i,1); if(!WOITEMS.length)WOITEMS=[blankWOItem()];
   if(WOI>=WOITEMS.length)WOI=WOITEMS.length-1; else if(i<WOI)WOI--;
@@ -1745,7 +1842,8 @@ function woMirror(o){
   return o;
 }
 function woItems(o){
-  if(o&&o.items&&o.items.length)return o.items;
+  if(!o)return [];
+  if(o.items&&o.items.length)return o.items;
   return [{brand:o.brand,model:o.model,productId:o.productId,custom:o.custom,custLayers:o.custLayers,borderWidth:o.borderWidth,
     L:o.L,W:o.W,H:o.H,Q:o.Q,lines:o.lines||[],subs:o.subs||[],act:o.act,soId:o.soId,soLine:o.soLine,soNo:o.soNo}];
 }
@@ -1775,6 +1873,11 @@ function saveWO(){
   const linked=o.items.some(i=>i.soId);
   if(editingWO){
     const ex=DB.orders.find(x=>x.id===editingWO);
+    if(!ex){alert('This work order was deleted on another device. Your changes were not saved.');resetWOForm();return;}
+    const pk=woItems(ex).map((it,k)=>({k,it,packed:woItemPacked(ex,k)})).filter(x=>x.packed>0);
+    for(const x of pk){const ni=WOITEMS.findIndex(w=>w._orig===x.k), nr=o.items[ni];
+      if(ni!==x.k||!nr||normName(nr.model)!==normName(x.it.model)){alert(`Product ${x.k+1} (${x.it.model}) is already on a packing slip, so it can't be removed, moved or changed to another model.\nDelete or edit the packing slip first.`);return;}
+      if((+nr.Q||0)<x.packed){alert(`Product ${x.k+1} (${x.it.model}): ${x.packed} already packed, so the quantity can't be less than ${x.packed}.`);return;}}
     ['soId','soNo','soLine','productId','custLayers'].forEach(k=>delete ex[k]);
     Object.assign(ex,o); logEdit(ex);
     save();toast("Work order "+ex.num+" updated"+(o.items.length>1?` — ${o.items.length} products`:''));editingWO=null;
@@ -1797,11 +1900,11 @@ function resetWOForm(){
 function editWO(id){
   const o=DB.orders.find(x=>x.id===id); if(!o)return;
   editingWO=id; WO_SUB='create';
-  WOITEMS=woItems(o).map(it=>{
+  WOITEMS=woItems(o).map((it,k)=>{
     const p=it.custom?null:(DB.products.find(x=>x.id===it.productId)||DB.products.find(x=>x.brand===it.brand&&x.name===it.model));
     return {brand:it.brand,prodId:p?p.id:'',custom:!!it.custom,custLayers:JSON.parse(JSON.stringify(it.custLayers||[])),
       custName:it.custom?it.model:'',custBrand:it.brand||'Napcat',custBW:it.borderWidth||82,L:it.L,W:it.W,H:it.H,Q:it.Q,
-      act:it.act?JSON.parse(JSON.stringify(it.act)):[],allowSub:!!(it.subs&&it.subs.length),soId:it.soId,soLine:it.soLine,soNo:it.soNo};});
+      act:it.act?JSON.parse(JSON.stringify(it.act)):[],allowSub:!!(it.subs&&it.subs.length),soId:it.soId,soLine:it.soLine,soNo:it.soNo,_orig:k};});
   WOI=0;
   showWO('create');
   document.getElementById('woCust').value=o.cust||'';document.getElementById('woCity').value=o.city||'';
@@ -1907,16 +2010,16 @@ function woSheetHTML(o){
       </div>
       <h4>RAW MATERIAL BREAKUP${multi?' — PRODUCT '+(k+1):''}</h4>
       <table><thead><tr><th style="text-align:left">Material</th><th style="text-align:left">Sizes / details entered</th><th style="text-align:center">Recommended</th><th style="text-align:center">Actual</th><th style="text-align:center">Contingent</th><th style="text-align:center">Metric</th></tr></thead><tbody>
-      ${(it.lines||[]).map(l=>`<tr><td style="text-align:left">${l.name}</td>
+      ${(it.lines||[]).map(l=>`<tr><td style="text-align:left">${escH(l.name)}</td>
         <td style="text-align:left;white-space:nowrap">${lineDetailHTML(l)}</td>
         <td style="text-align:center">${fmt(l.recommended,3)}</td>
         <td style="text-align:center">${l.entered?fmt(l.actual,3):'—'}</td>
         <td style="text-align:center">${l.contingent==null?'—':(l.contingent>0?'+':'')+fmt(l.contingent,3)}</td>
         <td style="text-align:center">${l.unit}</td></tr>`).join('')}
       </tbody></table>
-      ${(it.subs&&it.subs.length)?`<div style="padding:10px 14px" class="tag"><b>Substitutions:</b> ${it.subs.map(s=>`${s.layer} → ${s.used}`).join(' · ')}</div>`:''}
+      ${(it.subs&&it.subs.length)?`<div style="padding:10px 14px" class="tag"><b>Substitutions:</b> ${it.subs.map(s=>`${escH(s.layer)} → ${escH(s.used)}`).join(' · ')}</div>`:''}
     </div>`).join('')}
-    <div style="padding:12px 14px" class="tag">Delivery: ${o.delivery||'-'}</div>
+    <div style="padding:12px 14px" class="tag">Delivery: ${escH(o.delivery||'-')}</div>
   </div>`;
 }
 function viewWO(id){if(isSales())return; const o=DB.orders.find(x=>x.id===id);
@@ -1962,7 +2065,7 @@ function editProduct(id){
     <div class="grid g3" style="margin-top:12px">
       <div><label class="f">Brand</label><input id="pBrand" list="brandList" value="${p.brand||''}">
         <datalist id="brandList"><option>Napcat</option><option>Orthonap</option></datalist></div>
-      <div><label class="f">Product name</label><input id="pName" value="${p.name||''}"></div>
+      <div><label class="f">Product name</label><input id="pName" value="${escH(p.name||'')}"></div>
       <div><label class="f">Border fabric width (in)</label><input id="pBW" type="number" value="${p.borderWidth||82}"></div>
     </div>
     <div class="divider"></div>
@@ -2054,7 +2157,7 @@ function editMaterial(id){
   openModal(`<div class="row"><b style="font-size:16px">${id?'Edit':'New'} Material</b><div class="spacer"></div>
       <button class="btn ghost sm" onclick="closeModal()">Cancel</button></div>
     <div class="grid g2" style="margin-top:12px">
-      <div style="grid-column:1/3"><label class="f">Material name</label><input id="mName" value="${m.name}"></div>
+      <div style="grid-column:1/3"><label class="f">Material name</label><input id="mName" value="${escH(m.name)}"></div>
       <div><label class="f">Category</label><select id="mCat" onchange="matCatChange(this.value)">${CATS.map(c=>`<option ${c===m.cat?'selected':''}>${c}</option>`).join('')}</select></div>
       <div><label class="f">Unit</label><select id="mUnit">${UNITS.map(u=>`<option ${u===m.unit?'selected':''}>${u}</option>`).join('')}</select>
         <div class="hint" id="unitHint"></div></div>
@@ -2062,7 +2165,7 @@ function editMaterial(id){
       <div><label class="f">Minimum stock</label><input id="mMin" type="number" value="${m.min}"></div>
       <div><label class="f">Maximum stock</label><input id="mMax" type="number" value="${m.max}"></div>
       <div><label class="f">Default wastage %</label><input id="mCont" type="number" value="${m.cont||0}"></div>
-      <div style="grid-column:1/3"><label class="f">Supplier</label><input id="mSup" value="${m.sup||''}"></div>
+      <div style="grid-column:1/3"><label class="f">Supplier</label><input id="mSup" value="${escH(m.sup||'')}"></div>
     </div>
     <div class="divider"></div>
     <div class="row"><b>Floor sheet sizes</b><span class="tag">used by Shiva for actual foam usage · CFT = L×W×Th÷1728</span>
@@ -2108,6 +2211,9 @@ function commitMaterial(id){
 function delMaterial(id){
   const used=DB.products.some(p=>p.layers.some(l=>l.mat===id));
   if(used){alert("Cannot delete — this material is used in a product BOM. Remove it from products first.");return;}
+  const why=[DB.cuts.some(c=>c.mat===id)?'block cutting orders':'',DB.materials.some(m=>m.contOf===id)?'a contingent foam bucket':'',
+    (DB.moves||[]).some(v=>v.matId===id)?'stock ledger entries':'',DB.orders.some(o=>woItems(o).some(it=>(it.lines||[]).some(l=>l.matId===id)))?'work orders':''].filter(Boolean);
+  if(why.length){alert("Cannot delete — this material is used in "+why.join(', ')+".\nDeleting it would break those records. Set its stock to 0 or rename it instead.");return;}
   if(confirm("Delete this material?")){DB.materials=DB.materials.filter(m=>m.id!==id);save();closeModal();renderMaterials();toast('Material deleted');}
 }
 
@@ -2131,6 +2237,7 @@ document.getElementById('modal').addEventListener('click',e=>{if(e.target.id==='
 let CUT_SUB='create';
 function renderCutTab(){ showCut(CUT_SUB); }
 function showCut(sub){
+  if(!document.getElementById('cutSub-'+sub))sub='create';
   CUT_SUB=sub;
   document.querySelectorAll('#cutTabs button').forEach(b=>b.classList.toggle('active',b.dataset.c===sub));
   document.querySelectorAll('.cutSub').forEach(d=>d.style.display='none');
@@ -2285,6 +2392,12 @@ function renderCutPlan(){
     </div>`).join('')||'<p class="muted small">No thicknesses added yet.</p>';
 }
 function addCutPlan(){CUTPLAN.push({thk:'',count:1});renderCutPlan();cutBlkCft();}
+function cutLockedChange(c,o){
+  if(!c||c.status!=='completed')return false;
+  const blk=x=>JSON.stringify(x.v===3?(x.blocks||[]).map(b=>[+b.L,+b.W,+b.H]):[+x.L,+x.W,+x.H,+x.qty||1]);
+  if(o.mat!==c.mat||blk(o)!==blk(c)){alert(`${c.no} is already completed and its sheets are in stock.\n\nThe foam grade and block sizes can't be changed now — delete and re-enter the cutting order, or change only the supplier / invoice / date.`);return true;}
+  return false;
+}
 function commitCut(id){
   const v=x=>{const e=document.getElementById(x);return e?e.value:'';};
   const mm=window.__cutEditMM;
@@ -2295,7 +2408,7 @@ function commitCut(id){
   if(!(o.L>0&&o.W>0&&o.H>0)){alert("Enter valid block dimensions.");return;}
   if(mm&&(o.sL>o.L||o.sW>o.W)){alert("Sheet size can't be bigger than the block.");return;}
   if(!o.planned.length){alert("Add at least one thickness with quantity.");return;}
-  if(id){const c=DB.cuts.find(x=>x.id===id);Object.assign(c,o);logEdit(c);}
+  if(id){const c=DB.cuts.find(x=>x.id===id);if(cutLockedChange(c,o))return;Object.assign(c,o);logEdit(c);}
   else{o.id=uid();o.no=cutRef(DB.cutSeq);o.status='issued';o.result=null;o.createdAt=new Date().toISOString();DB.cuts.push(o);DB.cutSeq++;}
   save();closeModal();renderCutTab();toast(`Cutting order ${id?'updated':'created'}`);
 }
@@ -2449,7 +2562,7 @@ function commitCut3(id){
   if(!blocks.length||blocks.some(b=>!(b.L>0&&b.W>0&&b.H>0))){alert("Enter length, breadth and height for every block.");return;}
   const o={v:3,mat:v('cMat'),blocks,qty:blocks.length,L:blocks[0].L,W:blocks[0].W,H:blocks[0].H,sL:+v('cSL')||'',sW:+v('cSW')||'',
     supplier:v('cSup').trim(),invoiceNo:v('cInv').trim(),date:v('cDate'),planned:CUTPLAN.filter(p=>p.thk>0&&p.count>0)};
-  if(id){const c=DB.cuts.find(x=>x.id===id);Object.assign(c,o);logEdit(c);}
+  if(id){const c=DB.cuts.find(x=>x.id===id);if(cutLockedChange(c,o))return;Object.assign(c,o);logEdit(c);}
   else{o.id=uid();o.no=cutRef(DB.cutSeq);o.status='issued';o.result=null;o.createdAt=new Date().toISOString();DB.cuts.push(o);DB.cutSeq++;}
   save();closeModal();renderCutTab();toast(`Cutting order ${id?DB.cuts.find(x=>x.id===id).no+' updated':(DB.cuts[DB.cuts.length-1]||{}).no+' created'}`);
 }
@@ -2515,8 +2628,9 @@ function saveCut3(id){
     if(ERP_OK)postMove(mat,'cut-in',qty,{ref:c.no,note}); else mat.cur=+(Number(mat.cur||0)+qty).toFixed(3);};
   if(m){
     post(m,r.sheetsCFT-Number(c.stockAdded||0),'Fresh sheets from block cutting'+(c.stockAdded?' (re-recorded)':''));
-    post(cm,r.contingent-Number(c.contAdded||0),'Contingent foam from block cutting'+(c.contAdded?' (re-recorded)':''));
-    c.stockAdded=r.sheetsCFT; c.contAdded=r.contingent;
+    const contPos=Math.max(0,+r.contingent||0);
+    post(cm,contPos-Number(c.contAdded||0),'Contingent foam from block cutting'+(c.contAdded?' (re-recorded)':''));
+    c.stockAdded=r.sheetsCFT; c.contAdded=contPos;
     m.sheets=m.sheets||[];
     sheets.forEach(s=>{const t=+(s.thk/25.4).toFixed(2); if(!m.sheets.some(x=>x.l===s.L&&x.w===s.W&&x.t===t)) m.sheets.push({l:s.L,w:s.W,t});});
   }
@@ -2718,9 +2832,9 @@ function editOther(id){
       <button class="btn ghost sm" onclick="closeModal()">Cancel</button></div>
     <div class="grid g2" style="margin-top:12px">
       <div><label class="f">Date</label><input id="oDate" type="date" value="${o.date||today()}"></div>
-      <div><label class="f">Category (optional)</label><input id="oCat" value="${o.category||''}" placeholder="e.g. reminder, supplier, misc"></div>
-      <div style="grid-column:1/3"><label class="f">Title</label><input id="oTitle" value="${(o.title||'').replace(/"/g,'&quot;')}"></div>
-      <div style="grid-column:1/3"><label class="f">Note</label><textarea id="oNote" rows="4">${o.note||''}</textarea></div>
+      <div><label class="f">Category (optional)</label><input id="oCat" value="${escH(o.category||'')}" placeholder="e.g. reminder, supplier, misc"></div>
+      <div style="grid-column:1/3"><label class="f">Title</label><input id="oTitle" value="${escH((o.title||'').replace(/"/g,'&quot;'))}"></div>
+      <div style="grid-column:1/3"><label class="f">Note</label><textarea id="oNote" rows="4">${escH(o.note||'')}</textarea></div>
     </div>
     <div class="divider"></div>
     <div class="row">${id?`<button class="btn danger ghost sm" onclick='delOther(${JSON.stringify(id)})'>Delete</button>`:''}
@@ -2810,9 +2924,9 @@ function editQuilt(id){
   openModal(`<div class="row"><b style="font-size:16px">${id?'Edit':'New'} Quilting Job</b><div class="spacer"></div>
       <button class="btn ghost sm" onclick="closeModal()">Cancel</button></div>
     <div class="grid g3" style="margin-top:12px">
-      <div><label class="f">Job order #</label><input id="qNo" value="${j.no}"></div>
+      <div><label class="f">Job order #</label><input id="qNo" value="${escH(j.no)}"></div>
       <div><label class="f">Date issued</label><input id="qDate" type="date" value="${j.date||''}"></div>
-      <div><label class="f">Quilter</label><input id="qQuilter" value="${j.quilter||''}"></div>
+      <div><label class="f">Quilter</label><input id="qQuilter" value="${escH(j.quilter||'')}"></div>
     </div>
     <div class="divider"></div>
     <div class="row"><b>Product sets</b><span class="tag">each set = one fabric + its quilting foam · up to 12</span><div class="spacer"></div>
@@ -2820,7 +2934,7 @@ function editQuilt(id){
     <div id="qSetBox" style="margin-top:8px"></div>
     <div class="banner info" id="qSetTot" style="display:block"></div>
     <div class="grid g2">
-      <div style="grid-column:1/3"><label class="f">Notes</label><input id="qNotes" value="${j.notes||''}"></div>
+      <div style="grid-column:1/3"><label class="f">Notes</label><input id="qNotes" value="${escH(j.notes||'')}"></div>
     </div>
     <div class="row"><div class="spacer"></div><button class="btn g" onclick='commitQuilt(${JSON.stringify(id)})'>Save &amp; issue</button></div>`);
   renderQSets();
@@ -2832,9 +2946,9 @@ function renderQSets(){
       <div class="row" style="margin-bottom:6px"><b class="small">Set ${i+1}</b><div class="spacer"></div>
         <button class="btn danger ghost sm" onclick="QSETS.splice(${i},1);renderQSets()">✕</button></div>
       <div class="grid g2">
-        <div><label class="f">Fabric sent</label><input value="${s.fabric||''}" oninput="QSETS[${i}].fabric=this.value;qSetTotals()" placeholder="e.g. 240 GSM Knitted"></div>
+        <div><label class="f">Fabric sent</label><input value="${escH(s.fabric||'')}" oninput="QSETS[${i}].fabric=this.value;qSetTotals()" placeholder="e.g. 240 GSM Knitted"></div>
         <div><label class="f">Fabric length (m)</label><input type="number" value="${s.fabM||''}" oninput="QSETS[${i}].fabM=+this.value;qSetTotals()"></div>
-        <div><label class="f">Quilting foam sent</label><input value="${s.foam||''}" oninput="QSETS[${i}].foam=this.value;qSetTotals()" placeholder="e.g. 6mm quilting foam roll"></div>
+        <div><label class="f">Quilting foam sent</label><input value="${escH(s.foam||'')}" oninput="QSETS[${i}].foam=this.value;qSetTotals()" placeholder="e.g. 6mm quilting foam roll"></div>
         <div><label class="f">Foam length (m)</label><input type="number" value="${s.foamM||''}" oninput="QSETS[${i}].foamM=+this.value;qSetTotals()"></div>
       </div>
     </div>`).join('')||'<p class="muted small">Add at least one product set.</p>';
@@ -3095,7 +3209,7 @@ function exportExcel(type){
         r&&c.v===3?r.sheets.map(x=>`${x.count}× ${x.L}×${x.W}×${x.thk}mm`).join('; '):'']);});
   } else {rows.push(['Job #','Date','Quilter','Fabric','Fabric m','Quilting foam','Foam m','Quilted received m','Returned fabric m','Returned foam m','Pending m','Lots','Status']);
     DB.quiltJobs.forEach(j=>rows.push([j.no,j.date,j.quilter,j.fabric,j.fabM,j.foam,j.foamM,fmt(quiltRecv(j),1),fmt(quiltRetFab(j),1),fmt(quiltRetFoam(j),1),fmt(quiltPending(j),1),(j.receipts||[]).length,j.status]));}
-  const html='<table>'+rows.map(r=>'<tr>'+r.map(c=>`<td>${(c==null?'':String(c)).replace(/&/g,'&amp;').replace(/</g,'&lt;')}</td>`).join('')+'</tr>').join('')+'</table>';
+  const html='<table>'+rows.map(r=>'<tr>'+r.map(c=>{const t=(c==null?'':String(c)); return `<td${/^0\d+$/.test(t)?' style="mso-number-format:\'\\@\'"':''}>${t.replace(/&/g,'&amp;').replace(/</g,'&lt;')}</td>`;}).join('')+'</tr>').join('')+'</table>';
   const blob=new Blob(['﻿<html xmlns:x="urn:schemas-microsoft-com:office:excel"><head><meta charset="utf-8"></head><body>'+html+'</body></html>'],{type:'application/vnd.ms-excel'});
   const a=document.createElement('a');a.href=URL.createObjectURL(blob);
   a.download=(type==='wo'?'WorkOrders':type==='cut'?'CuttingOrders':'QuiltingJobs')+'-'+today()+'.xls';a.click();
@@ -3218,7 +3332,7 @@ function renderPriceList(){
     list.map(p=>{const s0=p.sizes[0]||{p:[]}, sN=p.sizes[p.sizes.length-1]||{p:[]};
       return `<tr style="${p.active===false?'opacity:.5':''}"><td>${escH(p.brand)}</td><td><b>${escH(p.model)}</b>${p.active===false?' <span class="pill pend">hidden</span>':''}</td>
       <td>${escH(p.warranty||'-')}</td><td>${p.thks.map(escH).join(', ')}</td>
-      <td class="num">${rs0(Math.min(...s0.p.filter(x=>x>0)))}</td><td class="num">${rs0(Math.max(...sN.p.filter(x=>x>0)))}</td>
+      <td class="num">${s0.p.some(x=>x>0)?rs0(Math.min(...s0.p.filter(x=>x>0))):'—'}</td><td class="num">${sN.p.some(x=>x>0)?rs0(Math.max(...sN.p.filter(x=>x>0))):'—'}</td>
       <td class="num">${p.rate.join(' / ')}</td><td>${escH((p.updatedAt||'').slice(0,10))}</td>
       <td class="num acts"><button class="btn ghost sm" onclick='plModal(${JSON.stringify(p.id)})'>View / edit</button></td></tr>`;}).join('')+`</tbody></table>`;
 }
@@ -3542,7 +3656,7 @@ function renderSOForm(){
 function soFillCust(name){if(!SOF)return;
   const h=document.getElementById('soCustHint'), c=custFind(name);
   if(h){const sim=c?[]:custSimilar(name);
-    h.innerHTML=c?`✓ Existing customer${c.city?' · '+escH(c.city):''}`:sim.length?`⚠ Similar existing: ${sim.slice(0,4).map(n=>`<a href="#" onclick='soPickCust(${JSON.stringify(n)});return false'>${escH(n)}</a>`).join(', ')}`:(custKey(name).length>=3?'New customer':'');
+    h.innerHTML=c?`✓ Existing customer${c.city?' · '+escH(c.city):''}`:sim.length?`⚠ Similar existing: ${sim.slice(0,4).map(n=>`<a href="#" onclick="soPickCust(${escH(JSON.stringify(n))});return false">${escH(n)}</a>`).join(', ')}`:(custKey(name).length>=3?'New customer':'');
     h.style.color=c?'var(--accent2)':sim.length?'var(--warn)':'';}
   if(!c)return;
   ['phone','city','addr'].forEach(k=>{if(!SOF.cust[k]&&c[k])SOF.cust[k]=c[k];});
@@ -3624,8 +3738,10 @@ function commitSO(){
   if(s.transport.mode==='extra'&&!(+s.transport.charge>0)){alert('Enter the transport charge, or choose another transportation option.');return;}
   if(SO_EDIT){
     const ex=soById(SO_EDIT); if(!ex){alert('This sales order no longer exists.');return;}
+    if(!soCanEdit(ex)){alert(`${ex.no} can no longer be edited — ${soWOs(ex).length?'a work order has already been made from it':'its status changed to '+soStatus(ex).l}.\n\nYour changes were not saved.`);SOF=null;SO_EDIT=null;showSales('list');return;}
     const wasRej=ex.status==='rejected';
-    Object.assign(ex,JSON.parse(JSON.stringify(s)));
+    const form=JSON.parse(JSON.stringify(s));
+    ['cust','reqDate','items','extras','payment','transport','remarks'].forEach(k=>ex[k]=form[k]);
     if(wasRej||(!isAdmin()&&ex.status!=='pending')){ex.status='pending';delete ex.rejectReason;}
     soLog(ex,wasRej?'Edited & resubmitted':'Edited'); ex.updatedAt=nowISO();
     save(); toast(`Sales order ${ex.no} ${wasRej?'resubmitted for approval':'updated'}`);
@@ -3663,6 +3779,7 @@ function pendingBadge(){const b=document.querySelector('#woTabs button[data-w="p
 // Pending orders ▸ Create WO: open the WO form for that customer with this product already added
 function woFromSO(soId,line){
   const s=soById(soId); if(!s)return;
+  if(editingWO&&!confirm('You are in the middle of editing a work order. Discard those changes and start a new work order from '+s.no+'?'))return;
   WO_SUB='create'; showWO('create'); resetWOForm();
   const set=(id,v)=>{const e=document.getElementById(id); if(e&&!e.value)e.value=v==null?'':v;};
   set('woCust',s.cust.name); set('woCity',s.cust.city); set('woAgent',s.createdBy);
@@ -3905,9 +4022,11 @@ function renderIssueLines(){
   const box=document.getElementById('isLines'); if(!box)return;
   const o=DB.orders.find(x=>String(x.num).toLowerCase()===(val('isWO')||'').toLowerCase());
   if(!o){box.innerHTML='<p class="muted small">Pick a work order to load its material list.</p>';return;}
-  const lines=(o.lines||[]).filter(l=>l.matId&&matById(l.matId));
+  // one row per material: products in a multi-product WO that share a material are added together
+  const grp={}; woItems(o).forEach(it=>(it.lines||[]).forEach(l=>{if(!l.matId||!matById(l.matId))return; grp[l.matId]=(grp[l.matId]||0)+plannedQty(l);}));
+  const lines=Object.entries(grp).map(([matId,p])=>({matId,p}));
   box.innerHTML=`<table class="oneline"><thead><tr><th>Material</th><th class="num">Planned</th><th class="num">Issued</th><th class="num">In stock</th><th class="num" style="width:130px">Issue now</th><th>Unit</th></tr></thead><tbody>`+
-    lines.map((l,i)=>{const m=matById(l.matId),p=plannedQty(l),done=issuedFor(o.id,l.matId),rem=Math.max(0,+(p-done).toFixed(3));
+    lines.map((l,i)=>{const m=matById(l.matId),p=l.p,done=issuedFor(o.id,l.matId),rem=Math.max(0,+(p-done).toFixed(3));
       return `<tr><td class="ell" style="max-width:220px" title="${escH(m.name)}">${escH(m.name)}</td><td class="num">${fmt(p,3)}</td><td class="num">${done?fmt(done,3):'-'}</td>
         <td class="num" style="color:${Number(m.cur)<rem?'var(--danger)':''}">${fmt(m.cur,3)}</td>
         <td class="num"><input class="isQ" data-mat="${m.id}" type="number" step="0.001" value="${rem}" style="padding:5px 7px;text-align:right"></td><td>${m.unit}</td></tr>`;}).join('')+
@@ -4114,7 +4233,7 @@ function dispatchModal(id){
       <div><label class="f">Dispatch date</label><input id="dpDate" type="date" value="${d.date}"></div>
       <div><label class="f">Customer</label><input id="dpCust" value="${escH(d.cust)}" list="dlCust2" autocomplete="off" oninput="renderDpPick()"><datalist id="dlCust2">${customerNames().map(c=>`<option value="${escH(c)}">`).join('')}</datalist></div>
       <div><label class="f">City</label><input id="dpCity" value="${escH(d.city)}"></div>
-      <div><label class="f">Tally invoice no</label><input id="dpInv" value="${escH(d.invoiceNo)}"></div>
+      <div><label class="f">Tally invoice no</label><input id="dpInvNo" value="${escH(d.invoiceNo)}"></div>
       <div><label class="f">Invoice date (warranty starts)</label><input id="dpInvD" type="date" value="${d.invoiceDate||''}"></div>
       <div><label class="f">Vehicle no</label><input id="dpVeh" value="${escH(d.vehicle)}" placeholder="TN 33 AB 1234"></div>
       <div><label class="f">Transporter</label><input id="dpTr" value="${escH(d.transporter)}"></div>
@@ -4156,7 +4275,7 @@ function commitDispatch(id){
   if(!val('dpCust'))return err('Customer is required.');
   const d=id?DB.dispatches.find(x=>x.id===id):{id:uid(),no:seqRef('DSP-',DB.dispSeq++),by:CURRENT_USER.name,at:nowISO()};
   const before=new Set(d.serialIds||[]);
-  Object.assign(d,{date:document.getElementById('dpDate').value||today(),cust:val('dpCust'),city:val('dpCity'),invoiceNo:val('dpInv'),
+  Object.assign(d,{date:document.getElementById('dpDate').value||today(),cust:val('dpCust'),city:val('dpCity'),invoiceNo:val('dpInvNo'),
     invoiceDate:document.getElementById('dpInvD').value,vehicle:val('dpVeh'),transporter:val('dpTr'),lr:val('dpLR'),note:val('dpNote'),
     wYears:+document.getElementById('dpWY').value||0,rYears:+document.getElementById('dpRY').value||0,serialIds:[...DP_SEL]});
   d.woNums=uniq(d.serialIds.map(sid=>(DB.serials.find(s=>s.id===sid)||{}).woNum));
@@ -4404,7 +4523,7 @@ function psAddLine(num){const o=DB.orders.find(x=>String(x.num).toLowerCase()===
 function commitPS(id){
   if(isSales())return;
   const err=t=>{const b=document.getElementById('psErr');b.className='banner err';b.textContent=t;};
-  const lines=PSL.filter(l=>+l.qty>0);
+  const lines=PSL.filter(l=>+l.qty>0&&DB.orders.some(o=>o.id===l.woId));
   if(!lines.length)return err('Add at least one work order with a quantity.');
   if(!val('psCust'))return err('Customer is required.');
   { const c=custConfirm(val('psCust')); if(c==null)return; document.getElementById('psCust').value=c; }
