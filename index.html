@@ -101,7 +101,9 @@
     table.oneline td[data-label="Yield"],table.oneline td[data-label="Supplier"],table.oneline td[data-label="Supplier inv."],
     table.oneline td[data-label="Last movement"],table.oneline td[data-label="By"]{display:none}
   }
-  table.oneline td.wrap{white-space:normal;min-width:180px}
+  table.oneline td.wrap{white-space:normal;min-width:140px;max-width:300px;overflow-wrap:anywhere;line-height:1.35}
+  table.oneline td.acts{white-space:normal;min-width:170px}
+  table.oneline td.acts .btn{margin:2px 0 2px 3px}
   table.oneline td.acts{width:1%}
   table.oneline td.acts .btn{margin-left:3px}
   table.oneline tbody tr:nth-child(even) td{background:#fafbfd}
@@ -316,6 +318,7 @@
         <div class="row" style="margin-top:10px">
           <label class="tag">From</label><input type="date" id="woFrom" style="max-width:150px" onchange="renderWOAll()">
           <label class="tag">To</label><input type="date" id="woTo" style="max-width:150px" onchange="renderWOAll()">
+          <label class="tag">WO #</label><input id="woFNo" placeholder="work order no." style="max-width:130px" inputmode="numeric" oninput="renderWOAll()">
           <label class="tag">Client</label><input id="woFCust" list="dlAllCust" onfocus="fillAllCust()" placeholder="customer name" style="max-width:180px" oninput="renderWOAll()">
           <label class="tag">Model</label><input id="woFModel" list="dlModelAll" placeholder="mattress model" style="max-width:180px" oninput="renderWOAll()">
           <button class="btn ghost sm sortbtn" id="sort-wo" title="Sort by date" onclick="toggleSort('wo',renderWOAll)">📅 Newest first ↓</button>
@@ -512,13 +515,17 @@
         <button class="btn" onclick="editCut(null)">+ New cutting order</button></div>
       <p class="lead">Each cutting order holds its block details (grade, size, supplier, invoice). Length &amp; breadth in inches, height &amp; sheet thickness in mm. Record the actual block size and sheets cut — the contingent (block CFT − sheets CFT) is calculated automatically and fresh sheets flow into that foam's stock.</p>
       <div class="grid g4" id="cutKpis"></div>
-      <div class="card"><b>Cutting orders</b>
+      <div class="card"><div class="row"><b>Cutting orders</b><span class="tag">newest date first · latest 50</span><div class="spacer"></div>
+        <input id="cutHNo" placeholder="Cut #" style="max-width:130px" inputmode="numeric" oninput="renderCutting()">
+        <input id="cutHSup" placeholder="supplier name" style="max-width:170px" oninput="renderCutting()"></div>
         <div style="margin-top:10px;overflow:auto" id="cutList"></div></div>
     </div>
     <div class="cutSub" id="cutSub-all" style="display:none">
       <div class="card"><div class="row">
         <b>All Cutting Orders</b><span class="tag" id="cutCount"></span><div class="spacer"></div>
-        <input id="cutQ" placeholder="search cut #, grade, supplier, invoice…" style="max-width:240px" oninput="renderCutAll()">
+        <input id="cutNo" placeholder="Cut # (e.g. 141011)" style="max-width:150px" inputmode="numeric" oninput="renderCutAll()">
+        <input id="cutSup" list="dlCutSup" onfocus="fillDL('dlCutSup',uniq(DB.cuts.map(c=>c.supplier).filter(Boolean)))" placeholder="supplier name" style="max-width:170px" oninput="renderCutAll()"><datalist id="dlCutSup"></datalist>
+        <input id="cutQ" placeholder="other: grade, invoice…" style="max-width:170px" oninput="renderCutAll()">
         <select id="cutSt" style="max-width:150px" onchange="renderCutAll()"><option value="">All statuses</option><option value="open">Issued (open)</option><option value="completed">Completed</option></select>
         <label class="tag">From</label><input type="date" id="cutFrom" style="max-width:150px" onchange="renderCutAll()">
         <label class="tag">To</label><input type="date" id="cutTo" style="max-width:150px" onchange="renderCutAll()">
@@ -565,13 +572,17 @@
         <button class="btn" onclick="editQuilt(null)">+ New quilting job</button></div>
       <p class="lead">Send fabric + quilting foam to your quilter, track it, and record finished quilted fabric in lots on receipt.</p>
       <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(170px,1fr))" id="quiltKpis"></div>
-      <div class="card"><b>Job orders</b>
+      <div class="card"><div class="row"><b>Job orders</b><span class="tag">newest date first</span><div class="spacer"></div>
+        <input id="quiltHNo" placeholder="Job #" style="max-width:130px" inputmode="numeric" oninput="renderQuilting()">
+        <input id="quiltHQl" placeholder="quilter name" style="max-width:170px" oninput="renderQuilting()"></div>
         <div style="margin-top:10px;overflow:auto" id="quiltList"></div></div>
     </div>
     <div class="quiltSub" id="quiltSub-all" style="display:none">
       <div class="card"><div class="row">
         <b>All Quilting Jobs</b><span class="tag" id="quiltCount"></span><div class="spacer"></div>
-        <input id="quiltQ" placeholder="search job #, quilter, fabric…" style="max-width:220px" oninput="renderQuiltAll()">
+        <input id="quiltNo" placeholder="Job #" style="max-width:130px" inputmode="numeric" oninput="renderQuiltAll()">
+        <input id="quiltQl" list="dlQuilters" onfocus="fillDL('dlQuilters',uniq(DB.quiltJobs.map(j=>j.quilter).filter(Boolean)))" placeholder="quilter name" style="max-width:170px" oninput="renderQuiltAll()"><datalist id="dlQuilters"></datalist>
+        <input id="quiltQ" placeholder="other: fabric, foam…" style="max-width:170px" oninput="renderQuiltAll()">
         <select id="quiltSt" style="max-width:150px" onchange="renderQuiltAll()"><option value="">All statuses</option><option value="open">Issued / partial</option><option value="received">Closed</option></select>
         <label class="tag">From</label><input type="date" id="quiltFrom" style="max-width:150px" onchange="renderQuiltAll()">
         <label class="tag">To</label><input type="date" id="quiltTo" style="max-width:150px" onchange="renderQuiltAll()">
@@ -597,7 +608,8 @@
     </nav>
     <div class="salesSub" id="salesSub-list">
       <div class="card"><div class="row">
-        <input id="soF" placeholder="search SO #, model, sales person…" style="max-width:230px" oninput="renderSOList()">
+        <input id="soNo" placeholder="SO #" style="max-width:130px" inputmode="numeric" oninput="renderSOList()">
+        <input id="soF" placeholder="other: model, sales person…" style="max-width:200px" oninput="renderSOList()">
         <input id="cf-so" list="dlAllCust" placeholder="customer…" style="max-width:190px" autocomplete="off" onfocus="fillAllCust()" oninput="renderSOList()">
         <label class="tag">From</label><input type="date" id="soFrom" style="max-width:150px" onchange="renderSOList()">
         <label class="tag">To</label><input type="date" id="soTo" style="max-width:150px" onchange="renderSOList()">
@@ -1955,21 +1967,29 @@ function sortLbl(k){return SORTS[k]==='asc'?'📅 Oldest first ↑':'📅 Newest
 function toggleSort(k,fn){SORTS[k]=SORTS[k]==='asc'?'desc':'asc';const b=document.getElementById('sort-'+k);if(b)b.textContent=sortLbl(k);fn();}
 function byDate(list,k,getDate,keepTies){const asc=SORTS[k]==='asc';
   return list.map((x,i)=>({x,i,d:String(getDate(x)||'')})).sort((a,b)=>a.d===b.d?((asc||keepTies)?a.i-b.i:b.i-a.i):(a.d<b.d?(asc?-1:1):(asc?1:-1))).map(z=>z.x);}
+/* date first, then the serial number (both newest/highest first by default) */
+function serialKey(no){const m=String(no||'').match(/\d+/g);return m?m[m.length-1].padStart(12,'0'):'000000000000';}
+function dateNoKey(d,no,c){return String(d||'')+'|'+serialKey(no)+'|'+String(c||'');}
+function noMatch(no,q){q=String(q||'').trim().toLowerCase().replace(/\s+/g,'');if(!q)return true;
+  const n=String(no||'').toLowerCase().replace(/\s+/g,'');if(n.includes(q))return true;
+  const qd=q.replace(/\D/g,'');return !!qd&&qd===q&&n.replace(/\D/g,'').includes(qd);}
+function nameMatch(name,q){q=String(q||'').trim();return !q||String(name||'').toLowerCase().includes(q.toLowerCase())||custKey(name).includes(custKey(q));}
 function cfVal(k){const e=document.getElementById('cf-'+k);return e?e.value.trim():'';}
 function custMatch(name,q){return !q||custKey(name).includes(custKey(q));}
 function fillAllCust(){const d=document.getElementById('dlAllCust');if(d)d.innerHTML=customerNames().map(v=>`<option value="${escH(v)}">`).join('');}
 function txt(id){const e=document.getElementById(id);return e?(e.value||'').trim().toLowerCase():'';}
 function inRange(d,from,to){if(from&&d<from)return false;if(to&&d>to)return false;return true;}
-function clearWOFilter(){['woFrom','woTo','woFCust','woFModel'].forEach(id=>{const e=document.getElementById(id);if(e)e.value='';});renderWOAll();}
+function clearWOFilter(){['woFrom','woTo','woFNo','woFCust','woFModel'].forEach(id=>{const e=document.getElementById(id);if(e)e.value='';});renderWOAll();}
 function renderWOAll(){
   const from=document.getElementById('woFrom').value,to=document.getElementById('woTo').value;
   const fc=(document.getElementById('woFCust').value||'').trim().toLowerCase();
   const fm=(document.getElementById('woFModel').value||'').trim().toLowerCase();
   fillDL('dlModelAll',uniq(DB.orders.map(o=>o.model)));
+  const fno=(document.getElementById('woFNo')||{}).value||'';
   let list=DB.orders.filter(o=>inRange(o.date||'',from,to)
-    && custMatch(o.cust,fc)
+    && noMatch(o.num,fno) && custMatch(o.cust,fc)
     && (!fm || (o.model||'').toLowerCase().includes(fm)));
-  const list2=byDate(list,'wo',o=>(o.date||'')+(o.createdAt||'')); list.length=0; list.push(...list2);
+  const list2=byDate(list,'wo',o=>dateNoKey(o.date,o.num,o.createdAt)); list.length=0; list.push(...list2);
   document.getElementById('woCount').textContent=list.length+' of '+DB.orders.length;
   document.getElementById('woAllList').innerHTML= list.length?`<table class="oneline"><thead><tr>
     <th>WO #</th><th>Date</th><th>Customer</th><th>City</th><th>Agent</th><th>Brand · Model</th><th class="num">Size (in)</th><th class="num">Qty</th>
@@ -2247,8 +2267,9 @@ function showCut(sub){
 function renderCutAll(){
   const from=document.getElementById('cutFrom').value,to=document.getElementById('cutTo').value;
   const cq=txt('cutQ'), cst=(document.getElementById('cutSt')||{}).value||'';
-  const list=byDate(DB.cuts.filter(c=>inRange(c.date||'',from,to)&&(!cq||[c.no,cutGradeName(c),c.supplier,c.invoiceNo,c.notes].join(' ').toLowerCase().includes(cq))
-    &&(!cst||(cst==='completed'?c.status==='completed':c.status!=='completed'))),'cut',c=>(c.date||'')+(c.createdAt||''));
+  const cno=(document.getElementById('cutNo')||{}).value||'', csup=(document.getElementById('cutSup')||{}).value||'';
+  const list=byDate(DB.cuts.filter(c=>inRange(c.date||'',from,to)&&noMatch(c.no,cno)&&nameMatch(c.supplier,csup)&&(!cq||[c.no,cutGradeName(c),c.supplier,c.invoiceNo,c.notes].join(' ').toLowerCase().includes(cq))
+    &&(!cst||(cst==='completed'?c.status==='completed':c.status!=='completed'))),'cut',c=>dateNoKey(c.date,c.no,c.createdAt));
   document.getElementById('cutCount').textContent=list.length+' of '+DB.cuts.length;
   document.getElementById('cutAllList').innerHTML= list.length?`<table class="oneline"><thead><tr>
     <th>Cut #</th><th>Date</th><th>Grade</th><th class="num">Blocks</th><th>Supplier</th><th>Supplier inv.</th><th class="num">Block CFT</th><th class="num">Sheets CFT</th><th class="num">Contingent CFT</th><th class="num">Yield</th><th>Status</th>${DOCS_OK?'<th>Tally</th>':''}<th class="noprint"></th>
@@ -2310,7 +2331,8 @@ function renderCutting(){
     ["Total orders",DB.cuts.length],
     ["Sheets produced (CFT)",fmt(DB.cuts.reduce((s,c)=>s+(c.result?c.result.sheetsCFT:0),0),1)]];
   document.getElementById('cutKpis').innerHTML=k.map(([l,v])=>`<div class="kpi"><div class="v">${v}</div><div class="l">${l}</div></div>`).join('');
-  const cl=DB.cuts.slice().reverse().slice(0,50);
+  const hno=(document.getElementById('cutHNo')||{}).value||'', hsup=(document.getElementById('cutHSup')||{}).value||'';
+  const cl=byDate(DB.cuts.filter(c=>noMatch(c.no,hno)&&nameMatch(c.supplier,hsup)),'cutHome',c=>dateNoKey(c.date,c.no,c.createdAt)).slice(0,50);
   document.getElementById('cutList').innerHTML= cl.length?`<table class="oneline"><thead><tr>
     <th>Cut #</th><th>Date</th><th>Grade · Block size</th><th>Supplier</th><th>Planned</th><th class="num">Sheets CFT</th><th class="num">Contingent</th><th class="num">Yield</th><th>Status</th><th class="noprint"></th>
     </tr></thead><tbody>`+cl.map(c=>{
@@ -2319,7 +2341,7 @@ function renderCutting(){
       return `<tr><td><b>${c.no}</b></td><td>${c.date||''}</td>
       <td>${cutGradeName(c)}<div class="tag">${cutSizeQ(c)}</div></td>
       <td>${c.supplier||'-'}<div class="tag">${c.invoiceNo||''}</div></td>
-      <td class="small">${planned||'—'}</td><td class="num">${c.result?fmt(outCFT,3):'—'}</td><td class="num">${c.result?fmt(cutCont(c),3):'—'}</td>
+      <td class="small wrap">${planned||'—'}</td><td class="num">${c.result?fmt(outCFT,3):'—'}</td><td class="num">${c.result?fmt(cutCont(c),3):'—'}</td>
       <td class="num">${c.result?fmt(yld,1)+'%':'—'}</td>
       <td><span class="pill ${c.status==='completed'?'ok':'low'}">${c.status==='completed'?'DONE':'ISSUED'}</span></td>
       <td class="num noprint"><button class="btn ghost sm" onclick='viewCut(${JSON.stringify(c.id)})'>View</button>
@@ -2863,8 +2885,9 @@ function showQuilt(sub){
 function renderQuiltAll(){
   const from=document.getElementById('quiltFrom').value,to=document.getElementById('quiltTo').value;
   const qq=txt('quiltQ'), qst=(document.getElementById('quiltSt')||{}).value||'';
-  const list=byDate(DB.quiltJobs.filter(j=>inRange(j.date||'',from,to)&&(!qq||[j.no,j.quilter,j.fabric,...(j.sets||[]).map(x=>x.fabric+' '+x.foam)].join(' ').toLowerCase().includes(qq))
-    &&(!qst||(qst==='received'?j.status==='received':j.status!=='received'))),'quilt',j=>(j.date||'')+(j.createdAt||''));
+  const qno=(document.getElementById('quiltNo')||{}).value||'', qql=(document.getElementById('quiltQl')||{}).value||'';
+  const list=byDate(DB.quiltJobs.filter(j=>inRange(j.date||'',from,to)&&noMatch(j.no,qno)&&nameMatch(j.quilter,qql)&&(!qq||[j.no,j.quilter,j.fabric,...(j.sets||[]).map(x=>x.fabric+' '+x.foam)].join(' ').toLowerCase().includes(qq))
+    &&(!qst||(qst==='received'?j.status==='received':j.status!=='received'))),'quilt',j=>dateNoKey(j.date,j.no,j.createdAt));
   document.getElementById('quiltCount').textContent=list.length+' of '+DB.quiltJobs.length;
   document.getElementById('quiltAllList').innerHTML= list.length?`<table class="oneline"><thead><tr>
     <th>Job #</th><th>Date</th><th>Quilter</th><th>Fabric</th><th class="num">Issued</th><th class="num">Quilted</th><th class="num">Returned</th><th class="num">Pending</th><th>Lots</th><th>Status</th><th class="noprint"></th>
@@ -2897,7 +2920,8 @@ function renderQuilting(){
   const k=[["Open jobs",open],["Closed",DB.quiltJobs.filter(j=>j.status==='received').length],
     ["Fabric issued (m)",fmt(fab,1)],["Quilted received (m)",fmt(rcv,1)],["Returned unquilted (m)",fmt(DB.quiltJobs.reduce((s,j)=>s+quiltRetFab(j),0),1)]];
   document.getElementById('quiltKpis').innerHTML=k.map(([l,v])=>`<div class="kpi"><div class="v">${v}</div><div class="l">${l}</div></div>`).join('');
-  const jl=DB.quiltJobs.slice().reverse();
+  const hno=(document.getElementById('quiltHNo')||{}).value||'', hql=(document.getElementById('quiltHQl')||{}).value||'';
+  const jl=byDate(DB.quiltJobs.filter(j=>noMatch(j.no,hno)&&nameMatch(j.quilter,hql)),'quiltHome',j=>dateNoKey(j.date,j.no,j.createdAt));
   document.getElementById('quiltList').innerHTML= jl.length?`<table class="oneline"><thead><tr>
     <th>Job #</th><th>Quilter</th><th>Fabric</th><th class="num">Issued (m)</th><th class="num">Quilted (m)</th><th class="num">Returned (m)</th><th class="num">Pending</th><th>Lots</th><th>Status</th><th class="noprint"></th>
     </tr></thead><tbody>`+jl.map(j=>{const rc=quiltRecv(j);const rem=quiltPending(j), rt=quiltRetFab(j);
@@ -3498,8 +3522,9 @@ function visibleSOs(){return (DB.salesOrders||[]).filter(s=>!isSales()||s.create
 function renderSOList(){
   if(salesLocked('soBody'))return;
   const f=(document.getElementById('soF').value||'').trim().toLowerCase(), fs=document.getElementById('soS').value;
-  const all=byDate(visibleSOs(),'so',s=>(s.date||'')+(s.createdAt||'')), cq=cfVal('so'), sf=document.getElementById('soFrom').value, st2=document.getElementById('soTo').value;
-  const rows=all.filter(s=>custMatch(s.cust&&s.cust.name,cq)&&inRange(s.date||'',sf,st2)).map(s=>({s,st:soStatus(s),t:soTotals(s)})).filter(({s,st})=>
+  const all=byDate(visibleSOs(),'so',s=>dateNoKey(s.date,s.no,s.createdAt)), cq=cfVal('so'), sf=document.getElementById('soFrom').value, st2=document.getElementById('soTo').value;
+  const sno=(document.getElementById('soNo')||{}).value||'';
+  const rows=all.filter(s=>noMatch(s.no,sno)&&custMatch(s.cust&&s.cust.name,cq)&&inRange(s.date||'',sf,st2)).map(s=>({s,st:soStatus(s),t:soTotals(s)})).filter(({s,st})=>
     (!f||[s.no,s.cust&&s.cust.name,s.cust&&s.cust.city,s.cust&&s.cust.phone,s.createdBy,...(s.items||[]).map(itemDesc)].join(' ').toLowerCase().includes(f))&&
     (!fs||(fs==='pending'?s.status==='pending':fs==='rejected'?['rejected','cancelled'].includes(s.status):fs==='open'?(s.status==='approved'&&st.rank<5):fs==='done'?(s.status==='approved'&&st.rank>=5):true)));
   const pend=all.filter(s=>s.status==='pending').length;
@@ -4972,6 +4997,8 @@ function labelTables(){
     t.querySelectorAll('tbody tr').forEach(tr=>{let i=0;[...tr.children].forEach(td=>{
       if(!td.hasAttribute('data-label'))td.setAttribute('data-label',heads[i]||'');
       if(!td.textContent.trim()&&!td.querySelector('button,input,select'))td.classList.add('empty');
+      if(!td.classList.contains('ell')&&!td.classList.contains('wrap')&&!td.querySelector('button,input,select')&&td.textContent.trim().length>38)td.classList.add('wrap');
+      if(!td.classList.contains('acts')&&td.querySelectorAll(':scope > .btn, :scope > button').length>=2)td.classList.add('acts');
       i+=+(td.getAttribute('colspan')||1);});});
   });
 }
